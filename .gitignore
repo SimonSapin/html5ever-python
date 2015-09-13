@@ -1,6 +1,8 @@
+*.so
 *.egg-info
 *.egg
 *.pyc
 __pycache__/
 .tox/
 html5ever/_ffi.py
+target/

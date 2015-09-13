@@ -1,0 +1,12 @@
+[package]
+name = "html5ever-capi"
+version = "0.1.0"
+authors = ["Simon Sapin <simon.sapin@exyr.org>"]
+
+[lib]
+name = "html5ever_capi"
+path = "lib.rs"
+crate-type = ["dylib"]
+
+[dependencies]
+html5ever = "0.2.4"

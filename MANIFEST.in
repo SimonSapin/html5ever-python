@@ -1,0 +1,4 @@
+include rust-glue/Cargo.toml
+include rust-glue/Cargo.lock
+include rust-glue/lib.rs
+include setuptools_ext.py
