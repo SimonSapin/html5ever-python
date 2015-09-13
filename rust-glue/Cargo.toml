@@ -10,3 +10,5 @@ crate-type = ["dylib"]
 
 [dependencies]
 html5ever = "0.2.4"
+string_cache = "0.1.12"
+tendril = "0.1.5"
