@@ -1,5 +1,6 @@
-*.pyc
 *.egg-info
+*.egg
+*.pyc
 __pycache__/
-.eggs/
 .tox/
+html5ever/_ffi.py
