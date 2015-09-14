@@ -28,18 +28,17 @@ class Parser(object):
         self.refcounts = {}
         self.self_handle = ffi.new_handle(self)
         self.document = Document()
-        self.ptr = ffi.gc(
-            capi.new_parser(CALLBACKS, self.self_handle, self._new_node(self.document)),
-            capi.destroy_parser)
+        self.ptr = capi.new_parser(CALLBACKS, self.self_handle, self._new_node(self.document))
+
+    def __del__(self):
+        # Do this here rather than through ffi.gc:
+        # by the time ffi.gc would trigger, self.refcounts might have been removed already.
+        capi.destroy_parser(self.ptr)
 
     def _new_node(self, node):
         handle = ffi.new_handle(self.document)
         self.refcounts[handle] = 1
         return handle
-
-    def __del__(self):
-        # Trigger destroy_parser() while self.refcounts is still alive
-        del self.ptr
 
 
 class Node(object):
