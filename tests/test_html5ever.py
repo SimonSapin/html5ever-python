@@ -1,4 +1,16 @@
+import gc
 from html5ever import Parser
 
-def test_create_parser():
+def test_parser_gc():
+    deleted = [False]
+    class RecordDel(object):
+        def __del__(self):
+            deleted[0] = True
+
     parser = Parser()
+    parser.document.record_del = RecordDel()
+    assert not deleted[0]
+
+    del parser
+    gc.collect()
+    assert deleted[0]
