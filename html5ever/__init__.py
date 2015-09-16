@@ -117,7 +117,16 @@ def add_attribute_if_missing(_parser, element, namespace_url, local_name, value)
 @ffi.callback('Node*(ParserUserData*, Utf8Slice)')
 def create_comment(parser, data):
     parser = ffi.from_handle(ffi.cast('void*', parser))
-    parser._keep_alive(Comment(str_from_slice(data)))
+    return parser._keep_alive(Comment(str_from_slice(data)))
+
+
+@ffi.callback('void(ParserUserData*, Utf8Slice, Utf8Slice, Utf8Slice)')
+def append_doctype_to_document(parser, name, public_id, system_id):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
+    parser.document.children.append(Doctype(
+        str_from_slice(name),
+        str_from_slice(public_id),
+        str_from_slice(system_id)))
 
 
 @ffi.callback('void(ParserUserData*, Node*, Node*)')
@@ -139,8 +148,53 @@ def append_text(_parser, parent, data):
         parent.children.append(child)
 
 
+@ffi.callback('int(ParserUserData*, Node*, Node*)')
+def insert_node_before_sibling(_parser, sibling, child):
+    sibling = ffi.from_handle(ffi.cast('void*', sibling))
+    parent = sibling.parent
+    if parent is None:
+        return -1
+    child = ffi.from_handle(ffi.cast('void*', child))
+    position = parent.children.index(sibling)
+    parent.children.insert(position, child)
+    return 0
+
+
+@ffi.callback('int(ParserUserData*, Node*, Utf8Slice)')
+def insert_text_before_sibling(_parser, sibling, data):
+    sibling = ffi.from_handle(ffi.cast('void*', sibling))
+    parent = sibling.parent
+    if parent is None:
+        return -1
+    position = parent.children.index(sibling)
+    if position > 0 and isinstance(parent.children[position - 1], Text):
+        parent.children[position - 1].data += str_from_slice(data)
+    else:
+        child = Text(data)
+        child.parent = parent
+        parent.children.insert(position, child)
+    return 0
+
+
+@ffi.callback('void(ParserUserData*, Node*, Node*)')
+def reparent_children(_parser, parent, new_parent):
+    parent = ffi.from_handle(ffi.cast('void*', parent))
+    new_parent = ffi.from_handle(ffi.cast('void*', new_parent))
+    new_parent.children.extend(parent.children)
+    parent.children.clear()
+
+
+@ffi.callback('void(ParserUserData*, Node*)')
+def remove_from_parent(_parser, node):
+    node = ffi.from_handle(ffi.cast('void*', node))
+    if node.parent is not None:
+        node.parent.children.remove(node.parent.children.index(node))
+        node.parent = None
+
+
 CALLBACKS = capi.declare_callbacks(
     ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL,
     create_element, element_name, get_template_contents, add_attribute_if_missing,
-    create_comment,
-    append_node, append_text)
+    create_comment, append_doctype_to_document,
+    append_node, append_text, insert_node_before_sibling, insert_text_before_sibling,
+    reparent_children, remove_from_parent)

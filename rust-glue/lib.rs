@@ -6,15 +6,15 @@ use html5ever::tokenizer::{Tokenizer, Attribute};
 use html5ever::tree_builder::{TreeBuilder, TreeSink, QuirksMode, NodeOrText};
 use std::borrow::Cow;
 use std::slice;
-use std::str;
 use std::mem;
 use std::os::raw::{c_void, c_int};
-use string_cache::{Atom, Namespace, QualName};
+use string_cache::QualName;
 use tendril::StrTendril;
 
 /// When given as a function parameter, only valid for the duration of the call.
 #[repr(C)]
 #[derive(Copy, Clone)]
+#[allow(raw_pointer_derive)]
 pub struct BytesSlice {
     ptr: *const u8,
     len: usize,
@@ -41,10 +41,6 @@ pub struct Utf8Slice(BytesSlice);
 impl Utf8Slice {
     fn from_str(s: &str) -> Utf8Slice {
         Utf8Slice(BytesSlice::from_slice(s.as_bytes()))
-    }
-
-    unsafe fn as_str(&self) -> &str {
-        str::from_utf8_unchecked(self.0.as_slice())
     }
 }
 
@@ -179,14 +175,29 @@ impl TreeSink for CallbackTreeSink {
 
     fn append_before_sibling(&mut self, sibling: NodeHandle, child: NodeOrText<NodeHandle>)
                              -> Result<(), NodeOrText<NodeHandle>> {
-        unimplemented!()
+        let result = match child {
+            NodeOrText::AppendNode(ref node) => {
+                call!(self, insert_node_before_sibling(sibling.ptr, node.ptr))
+            }
+            NodeOrText::AppendText(ref text) => {
+                call!(self, insert_text_before_sibling(sibling.ptr, Utf8Slice::from_str(text)))
+            }
+        };
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(child)
+        }
     }
 
     fn append_doctype_to_document(&mut self,
                                   name: StrTendril,
                                   public_id: StrTendril,
                                   system_id: StrTendril) {
-        unimplemented!()
+        call!(self, append_doctype_to_document(
+            Utf8Slice::from_str(&name),
+            Utf8Slice::from_str(&public_id),
+            Utf8Slice::from_str(&system_id)))
     }
 
     fn add_attrs_if_missing(&mut self, target: NodeHandle, attrs: Vec<Attribute>) {
@@ -194,16 +205,14 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn remove_from_parent(&mut self, target: NodeHandle) {
-        unimplemented!()
+        call!(self, remove_from_parent(target.ptr))
     }
 
     fn reparent_children(&mut self, node: NodeHandle, new_parent: NodeHandle) {
-        unimplemented!()
+        call!(self, reparent_children(node.ptr, new_parent.ptr))
     }
 
-    fn mark_script_already_started(&mut self, target: NodeHandle) {
-        unimplemented!()
-    }
+    fn mark_script_already_started(&mut self, _target: NodeHandle) {}
 }
 
 macro_rules! unwrap_or_return {
@@ -292,11 +301,31 @@ declare_with_callbacks! {
     callback create_comment: extern "C" fn(*const OpaqueParserUserData,
         Utf8Slice) -> *const OpaqueNode
 
+    /// Create a doctype node and append it to the document.
+    callback append_doctype_to_document: extern "C" fn(*const OpaqueParserUserData,
+        Utf8Slice, Utf8Slice, Utf8Slice)
+
     callback append_node: extern "C" fn(*const OpaqueParserUserData,
         *const OpaqueNode, *const OpaqueNode)
 
     callback append_text: extern "C" fn(*const OpaqueParserUserData,
         *const OpaqueNode, Utf8Slice)
+
+    /// If `sibling` has a parent, insert the given node just before it and return 0.
+    /// Otherwise, do nothing and return a non-zero value.
+    callback insert_node_before_sibling: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode, *const OpaqueNode) -> c_int
+
+    /// If `sibling` has a parent, insert the given text just before it and return 0.
+    /// Otherwise, do nothing and return a non-zero value.
+    callback insert_text_before_sibling: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode, Utf8Slice) -> c_int
+
+    callback reparent_children: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode, *const OpaqueNode)
+
+    callback remove_from_parent: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode)
 }
 
 #[no_mangle]
