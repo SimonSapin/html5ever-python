@@ -136,7 +136,7 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn get_template_contents(&self, target: NodeHandle) -> NodeHandle {
-        unimplemented!()
+        self.new_handle(call!(self, get_template_contents(target.ptr)))
     }
 
     fn set_quirks_mode(&mut self, mode: QuirksMode) {
@@ -265,6 +265,9 @@ declare_with_callbacks! {
     /// Create an element node with the given namespace URL and local name.
     /// The qualified name (namespace URL plus local name) is also given in
     /// its Rust representation, to be returned in the `element_name` callback.
+    ///
+    /// If the element in `template` element in the HTML namespace,
+    /// an associated document fragment node should be created for the template contents.
     callback create_element: extern "C" fn(*const OpaqueParserUserData,
         Box<QualName>, Utf8Slice, Utf8Slice) -> *const OpaqueNode
 
@@ -272,6 +275,12 @@ declare_with_callbacks! {
     /// as was given by the `create_element` callback.
     callback element_name: extern "C" fn(*const OpaqueParserUserData,
         *const OpaqueNode) -> *const QualName
+
+    /// Return a reference to the document fragment node for the template contents.
+    ///
+    /// This is only ever called for `template` elements in the HTML namespace.
+    callback get_template_contents: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode) -> *const OpaqueNode
 
     /// Add the attribute (given as namespace URL, local name, and value)
     /// to the given element node if the element doesn’t already have

@@ -25,6 +25,7 @@ ffi.cdef('''
 
         Node* (*create_element)(ParserUserData*, QualifiedName*, Utf8Slice, Utf8Slice),
         QualifiedName* (*element_name)(ParserUserData*, Node*),
+        Node* (*get_template_contents)(ParserUserData*, Node*),
         void (*add_attribute_if_missing)(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice),
 
         void(*append_node)(ParserUserData*, Node*, Node*),

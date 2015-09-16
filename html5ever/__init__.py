@@ -7,6 +7,7 @@ capi = ffi.dlopen(os.path.join(os.path.dirname(__file__), 'libhtml5ever_capi.so'
 class Parser(object):
     def __init__(self):
         self._keep_alive_handles = []
+        self._template_contents_keep_alive_handles = {}
         self.document = Document()
         self._ptr = capi.new_parser(
             CALLBACKS, self._keep_alive(self), self._keep_alive(self.document))
@@ -37,28 +38,35 @@ class Parser(object):
 
 
 class Node(object):
-    """Abstract base class for all nodes in the tree."""
+    '''Abstract base class for all nodes in the tree.'''
     def __init__(self):
         self.parent = None
         self.children = []
 
 
 class Document(Node):
-    """A document node, the root of the tree."""
+    '''A document node, the root of the tree.'''
+
+
+class DocumentFragment(Node):
+    '''A document fragement node.'''
+
+
+HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml'
 
 
 class Element(Node):
-    """An element node."""
+    '''An element node.'''
     def __init__(self, qualified_name, namespace_url, local_name):
         super(Element, self).__init__()
         self.qualified_name = ffi.gc(qualified_name, capi.destroy_qualified_name)
-        self.namespace_url = namespace_url
-        self.local_name = local_name
+        self.name = (namespace_url, local_name)
         self.attributes = {}
+        self.template_contents = None
 
 
 class Text(Node):
-    """A text node."""
+    '''A text node.'''
     def __init__(self, data):
         super(Text, self).__init__()
         self.data = data
@@ -71,14 +79,24 @@ def str_from_slice(slice_):
 @ffi.callback('Node*(ParserUserData*, QualifiedName*, Utf8Slice, Utf8Slice)')
 def create_element(parser, qualified_name, namespace_url, local_name):
     parser = ffi.from_handle(ffi.cast('void*', parser))
-    return parser._keep_alive(Element(
-        qualified_name, str_from_slice(namespace_url), str_from_slice(local_name)))
+    element = Element(qualified_name, str_from_slice(namespace_url), str_from_slice(local_name))
+    if element.name == (HTML_NAMESPACE, 'template'):
+        element.template_contents = DocumentFragment()
+        parser._template_contents_keep_alive_handles[element] = ffi.new_handle(template_contents)
+    return parser._keep_alive(element)
 
 
 @ffi.callback('QualifiedName*(ParserUserData*, Node*)')
 def element_name(_parser, element):
     element = ffi.from_handle(ffi.cast('void*', element))
     return element.qualified_name
+
+
+@ffi.callback('Node*(ParserUserData*, Node*)')
+def get_template_contents(parser, element):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
+    element = ffi.from_handle(ffi.cast('void*', element))
+    return parser._template_contents_keep_alive_handles[element]
 
 
 @ffi.callback('void(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice)')
@@ -110,5 +128,5 @@ def append_text(_parser, parent, data):
 
 CALLBACKS = capi.declare_callbacks(
     ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL,
-    create_element, element_name, add_attribute_if_missing,
+    create_element, element_name, get_template_contents, add_attribute_if_missing,
     append_node, append_text)
