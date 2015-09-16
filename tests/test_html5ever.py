@@ -14,3 +14,6 @@ def test_parser_gc():
     del parser
     gc.collect()
     assert deleted[0]
+
+def test_feed():
+    Parser().feed(b'')

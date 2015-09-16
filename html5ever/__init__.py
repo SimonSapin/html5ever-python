@@ -3,8 +3,14 @@ from ._ffi import ffi
 
 capi = ffi.dlopen(os.path.join(os.path.dirname(__file__), 'libhtml5ever_capi.so'))
 
+@ffi.callback('Utf8Slice (*element_name)(ParserUserData*, Node*)')
+def element_name(parser, node):
+    pass
 
-CALLBACKS = capi.declare_callbacks(ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL)
+
+CALLBACKS = capi.declare_callbacks(
+    ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL,
+    element_name)
 
 
 class Parser(object):
@@ -18,6 +24,11 @@ class Parser(object):
         # Do this here rather than through ffi.gc:
         # by the time ffi.gc would trigger, self.refcounts might have been removed already.
         capi.destroy_parser(self._ptr)
+
+    def feed(self, bytes_chunk):
+        data = ffi.new('char[]', bytes_chunk)
+        slice_ = ffi.new('BytesSlice*', (data, len(bytes_chunk)))
+        capi.feed_parser(self._ptr, slice_[0])
 
     def _keep_alive(self, obj):
         '''
@@ -40,3 +51,7 @@ class Node(object):
 
 class Document(Node):
     """A document node, the root of the tree."""
+
+
+class Element(Node):
+    """An element node, the root of the tree."""

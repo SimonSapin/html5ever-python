@@ -8,10 +8,48 @@ use html5ever::tokenizer::{Tokenizer, Attribute};
 use html5ever::tree_builder::{TreeBuilder, TreeSink, QuirksMode, NodeOrText};
 use std::borrow::Cow;
 use std::slice;
+use std::str;
 use std::mem;
 use std::os::raw::{c_void, c_int};
-use string_cache::QualName;
+use string_cache::{Atom, Namespace, QualName};
 use tendril::StrTendril;
+
+/// When given as a function parameter, only valid for the duration of the call.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct BytesSlice {
+    ptr: *const u8,
+    len: usize,
+}
+
+impl BytesSlice {
+    fn from_slice(slice: &[u8]) -> BytesSlice {
+        BytesSlice {
+            ptr: slice.as_ptr(),
+            len: slice.len()
+        }
+    }
+
+    unsafe fn as_slice(&self) -> &[u8] {
+        slice::from_raw_parts(self.ptr, self.len)
+    }
+}
+
+/// When given as a function parameter, only valid for the duration of the call.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct Utf8Slice(BytesSlice);
+
+impl Utf8Slice {
+    fn from_str(s: &str) -> Utf8Slice {
+        Utf8Slice(BytesSlice::from_slice(s.as_bytes()))
+    }
+
+    unsafe fn as_str(&self) -> &str {
+        str::from_utf8_unchecked(self.0.as_slice())
+    }
+}
+
 
 pub type OpaqueParserUserData = c_void;
 pub type OpaqueNode = c_void;
@@ -76,7 +114,7 @@ impl TreeSink for CallbackTreeSink {
     type Handle = NodeHandle;
 
     fn parse_error(&mut self, msg: Cow<'static, str>) {
-        call_if_some!(self, parse_error(&msg.as_bytes()[0], msg.len()))
+        call_if_some!(self, parse_error(Utf8Slice::from_str(&msg)))
     }
 
     fn get_document(&mut self) -> NodeHandle {
@@ -194,12 +232,12 @@ declare_with_callbacks! {
     /// The pointer can not be used after the end of this call.
     /// If this callback is not provided, author conformance errors are ignored.
     callback parse_error: Option<extern "C" fn(*const OpaqueParserUserData,
-        &u8, usize)>
+        Utf8Slice)>
 }
 
 #[no_mangle]
 pub extern "C" fn new_parser(callbacks: &'static Callbacks,
-                             data: *const c_void,
+                             data: *const OpaqueParserUserData,
                              document: *const OpaqueNode)
                              -> Box<Parser> {
     let sink = CallbackTreeSink {
@@ -220,11 +258,11 @@ pub extern "C" fn new_parser(callbacks: &'static Callbacks,
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn feed_parser(parser: &mut Parser, chunk_ptr: *const u8, chunk_length: usize) {
+pub unsafe extern "C" fn feed_parser(parser: &mut Parser, chunk: BytesSlice) {
     let tokenizer = unwrap_or_return!(parser.opt_tokenizer.as_mut());
     // FIXME: Support UTF-8 byte sequences split across chunk boundary
     // FIXME: Go through the data once here instead of twice.
-    let string = String::from_utf8_lossy(slice::from_raw_parts(chunk_ptr, chunk_length));
+    let string = String::from_utf8_lossy(chunk.as_slice());
     tokenizer.feed((&*string).into())
 }
 
