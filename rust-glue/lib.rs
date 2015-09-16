@@ -1,3 +1,5 @@
+#![feature(catch_panic)]
+
 extern crate html5ever;
 extern crate string_cache;
 extern crate tendril;
@@ -8,6 +10,7 @@ use std::borrow::Cow;
 use std::slice;
 use std::mem;
 use std::os::raw::{c_void, c_int};
+use std::thread::catch_panic;
 use string_cache::QualName;
 use tendril::StrTendril;
 
@@ -99,6 +102,13 @@ struct CallbackTreeSink {
 pub struct Parser {
     opt_tokenizer: Option<Tokenizer<TreeBuilder<NodeHandle, CallbackTreeSink>>>
 }
+
+struct ParserMutPtr(*mut Parser);
+
+// FIXME: These make catch_panic happy, but they are total lies as far as I know.
+unsafe impl Send for BytesSlice {}
+unsafe impl Send for ParserMutPtr {}
+unsafe impl Send for Parser {}
 
 impl CallbackTreeSink {
     fn new_handle(&self, ptr: *const OpaqueNode) -> NodeHandle {
@@ -237,10 +247,13 @@ macro_rules! declare_with_callbacks {
         ///
         /// This leaks memory, but you normally only need one of these per program.
         #[no_mangle]
-        pub unsafe extern "C" fn declare_callbacks($( $name: $ty ),+) -> &'static Callbacks {
-            &*Box::into_raw(Box::new(Callbacks {
-                $( $name: $name, )+
-            }))
+        pub unsafe extern "C" fn declare_callbacks($( $name: $ty ),+)
+                                                   -> Option<&'static Callbacks> {
+            catch_panic_opt(move || {
+                &*Box::into_raw(Box::new(Callbacks {
+                    $( $name: $name, )+
+                }))
+            })
         }
 
     }
@@ -332,46 +345,76 @@ declare_with_callbacks! {
 pub extern "C" fn new_parser(callbacks: &'static Callbacks,
                              data: *const OpaqueParserUserData,
                              document: *const OpaqueNode)
-                             -> Box<Parser> {
-    let sink = CallbackTreeSink {
-        parser_user_data: data,
-        callbacks: callbacks,
-        document: NodeHandle {
-            ptr: document,
+                             -> Option<Box<Parser>> {
+    struct TotallyNotSendProbably(*const OpaqueParserUserData, *const OpaqueNode);
+    unsafe impl Send for TotallyNotSendProbably {}  // ???
+    let send = TotallyNotSendProbably(data, document);
+    catch_panic_opt(move || {
+        let data = send.0;
+        let document = send.1;
+        let sink = CallbackTreeSink {
             parser_user_data: data,
             callbacks: callbacks,
-        },
-        quirks_mode: QuirksMode::NoQuirks,
-    };
-    let tree_builder = TreeBuilder::new(sink, Default::default());
-    let tokenizer = Tokenizer::new(tree_builder, Default::default());
-    Box::new(Parser {
-        opt_tokenizer: Some(tokenizer)
+            document: NodeHandle {
+                ptr: document,
+                parser_user_data: data,
+                callbacks: callbacks,
+            },
+            quirks_mode: QuirksMode::NoQuirks,
+        };
+        let tree_builder = TreeBuilder::new(sink, Default::default());
+        let tokenizer = Tokenizer::new(tree_builder, Default::default());
+        Box::new(Parser {
+            opt_tokenizer: Some(tokenizer)
+        })
     })
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn feed_parser(parser: &mut Parser, chunk: BytesSlice) {
-    let tokenizer = unwrap_or_return!(parser.opt_tokenizer.as_mut());
-    // FIXME: Support UTF-8 byte sequences split across chunk boundary
-    // FIXME: Go through the data once here instead of twice.
-    let string = String::from_utf8_lossy(chunk.as_slice());
-    tokenizer.feed((&*string).into())
+pub unsafe extern "C" fn feed_parser(parser: &mut Parser, chunk: BytesSlice) -> c_int {
+    let parser = ParserMutPtr(parser);
+    catch_panic_int(move || {
+        let parser = &mut *parser.0;
+        let tokenizer = unwrap_or_return!(parser.opt_tokenizer.as_mut());
+        // FIXME: Support UTF-8 byte sequences split across chunk boundary
+        // FIXME: Go through the data once here instead of twice.
+        let string = String::from_utf8_lossy(chunk.as_slice());
+        tokenizer.feed((&*string).into())
+    })
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn end_parser(parser: &mut Parser) {
-    let mut tokenizer = unwrap_or_return!(parser.opt_tokenizer.take());
-    tokenizer.end();
+pub unsafe extern "C" fn end_parser(parser: &mut Parser) -> c_int {
+    let parser = ParserMutPtr(parser);
+    catch_panic_int(move || {
+        let parser = &mut *parser.0;
+        let mut tokenizer = unwrap_or_return!(parser.opt_tokenizer.take());
+        tokenizer.end();
+    })
 }
 
 #[no_mangle]
-pub extern "C" fn destroy_parser(mut parser: Box<Parser>) {
-    // Leave `None` behind to protect against double drop.
-    mem::drop(parser.opt_tokenizer.take())
+pub extern "C" fn destroy_parser(mut parser: Box<Parser>) -> c_int {
+    catch_panic_int(move || {
+        // Leave `None` behind to protect against double drop.
+        mem::drop(parser.opt_tokenizer.take())
+    })
 }
 
 #[no_mangle]
-pub extern "C" fn destroy_qualified_name(name: Box<QualName>) {
-    mem::drop(name)
+pub extern "C" fn destroy_qualified_name(name: Box<QualName>) -> c_int {
+    catch_panic_int(|| {
+        mem::drop(name)
+    })
+}
+
+fn catch_panic_opt<R, F: FnOnce() -> R + Send + 'static>(f: F) -> Option<R> {
+    catch_panic(f).ok()
+}
+
+fn catch_panic_int<F: FnOnce() + Send + 'static>(f: F) -> c_int {
+    match catch_panic(f) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
 }

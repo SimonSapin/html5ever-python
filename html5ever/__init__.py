@@ -9,18 +9,18 @@ class Parser(object):
         self._keep_alive_handles = []
         self._template_contents_keep_alive_handles = {}
         self.document = Document()
-        self._ptr = capi.new_parser(
-            CALLBACKS, self._keep_alive(self), self._keep_alive(self.document))
+        self._ptr = check_null(capi.new_parser(
+            CALLBACKS, self._keep_alive(self), self._keep_alive(self.document)))
 
     def __del__(self):
         # Do this here rather than through ffi.gc:
         # by the time ffi.gc would trigger, self.refcounts might have been removed already.
-        capi.destroy_parser(self._ptr)
+        check_int(capi.destroy_parser(self._ptr))
 
     def feed(self, bytes_chunk):
         data = ffi.new('char[]', bytes_chunk)
         slice_ = ffi.new('BytesSlice*', (data, len(bytes_chunk)))
-        capi.feed_parser(self._ptr, slice_[0])
+        check_int(capi.feed_parser(self._ptr, slice_[0]))
 
     def _keep_alive(self, obj):
         '''
@@ -59,7 +59,9 @@ class Element(Node):
     '''An element node.'''
     def __init__(self, qualified_name, namespace_url, local_name):
         super(Element, self).__init__()
-        self.qualified_name = ffi.gc(qualified_name, capi.destroy_qualified_name)
+        self.qualified_name = ffi.gc(
+            qualified_name,
+            lambda q: check_int(capi.destroy_qualified_name(q)))
         self.name = (namespace_url, local_name)
         self.attributes = {}
         self.template_contents = None
@@ -192,9 +194,27 @@ def remove_from_parent(_parser, node):
         node.parent = None
 
 
-CALLBACKS = capi.declare_callbacks(
+def check_null(pointer):
+    if pointer == ffi.NULL:
+        raise RustPanic()
+    else:
+        return pointer
+
+
+def check_int(value):
+    if value < 0:
+        raise RustPanic()
+    else:
+        return value
+
+
+class RustPanic(Exception):
+    '''Some Rust code panicked. This is a bug.'''
+
+
+CALLBACKS = check_null(capi.declare_callbacks(
     ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL,
     create_element, element_name, get_template_contents, add_attribute_if_missing,
     create_comment, append_doctype_to_document,
     append_node, append_text, insert_node_before_sibling, insert_text_before_sibling,
-    reparent_children, remove_from_parent)
+    reparent_children, remove_from_parent))

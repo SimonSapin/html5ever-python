@@ -39,9 +39,9 @@ ffi.cdef('''
     );
 
     Parser* new_parser(Callbacks*, ParserUserData*, Node*);
-    void destroy_parser(Parser*);
-    void feed_parser(Parser*, BytesSlice);
-    void destroy_qualified_name(QualifiedName*);
+    int destroy_parser(Parser*);
+    int feed_parser(Parser*, BytesSlice);
+    int destroy_qualified_name(QualifiedName*);
 
 ''')
 
