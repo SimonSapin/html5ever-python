@@ -65,7 +65,7 @@ macro_rules! call {
 
 macro_rules! call_if_some {
     ($self_: expr, $opt_callback: ident ( $( $arg: expr ),* )) => {
-        call_if_some!($self_, $opt_callback( $( $arg ),* ) else ())
+        call_if_some!($self_, $opt_callback( $( $arg ),* ) else 0)
     };
     ($self_: expr, $opt_callback: ident ( $( $arg: expr ),* ) else $default: expr) => {
         if let Some(callback) = $self_.callbacks.$opt_callback {
@@ -79,7 +79,7 @@ macro_rules! call_if_some {
 impl Clone for NodeHandle {
     fn clone(&self) -> NodeHandle {
         NodeHandle {
-            ptr: call_if_some!(self, clone_node_ref(self.ptr) else self.ptr),
+            ptr: check_pointer(call_if_some!(self, clone_node_ref(self.ptr) else self.ptr)),
             parser_user_data: self.parser_user_data,
             callbacks: self.callbacks,
         }
@@ -88,7 +88,7 @@ impl Clone for NodeHandle {
 
 impl Drop for NodeHandle {
     fn drop(&mut self) {
-        call_if_some!(self, destroy_node_ref(self.ptr))
+        check_int(call_if_some!(self, destroy_node_ref(self.ptr)));
     }
 }
 
@@ -121,11 +121,11 @@ impl CallbackTreeSink {
 
     fn add_attributes_if_missing(&self, element: *const OpaqueNode, attributes: Vec<Attribute>) {
         for attribute in attributes {
-            call!(self, add_attribute_if_missing(
+            check_int(call!(self, add_attribute_if_missing(
                 element,
                 Utf8Slice::from_str(&attribute.name.ns.0),
                 Utf8Slice::from_str(&attribute.name.local),
-                Utf8Slice::from_str(&attribute.value)));
+                Utf8Slice::from_str(&attribute.value))));
         }
     }
 }
@@ -134,7 +134,7 @@ impl TreeSink for CallbackTreeSink {
     type Handle = NodeHandle;
 
     fn parse_error(&mut self, msg: Cow<'static, str>) {
-        call_if_some!(self, parse_error(Utf8Slice::from_str(&msg)))
+        check_int(call_if_some!(self, parse_error(Utf8Slice::from_str(&msg))));
     }
 
     fn get_document(&mut self) -> NodeHandle {
@@ -142,7 +142,7 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn get_template_contents(&self, target: NodeHandle) -> NodeHandle {
-        self.new_handle(call!(self, get_template_contents(target.ptr)))
+        self.new_handle(check_pointer(call!(self, get_template_contents(target.ptr))))
     }
 
     fn set_quirks_mode(&mut self, mode: QuirksMode) {
@@ -150,11 +150,11 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn same_node(&self, x: NodeHandle, y: NodeHandle) -> bool {
-        call_if_some!(self, same_node(x.ptr, y.ptr) else (x.ptr == y.ptr) as c_int) != 0
+        check_int(call_if_some!(self, same_node(x.ptr, y.ptr) else (x.ptr == y.ptr) as c_int)) != 0
     }
 
     fn elem_name(&self, target: NodeHandle) -> QualName {
-        let ptr = call!(self, element_name(target.ptr));
+        let ptr = check_pointer(call!(self, element_name(target.ptr)));
         unsafe {
             (*ptr).clone()
          }
@@ -163,37 +163,39 @@ impl TreeSink for CallbackTreeSink {
     fn create_element(&mut self, name: QualName, attrs: Vec<Attribute>) -> NodeHandle {
         let namespace_url = Utf8Slice::from_str(&name.ns.0);
         let local_name = Utf8Slice::from_str(&name.local);
-        let element = call!(self, create_element(Box::new(name), namespace_url, local_name));
+        let element = check_pointer(call!(
+            self, create_element(Box::new(name), namespace_url, local_name)));
         self.add_attributes_if_missing(element, attrs);
         self.new_handle(element)
     }
 
     fn create_comment(&mut self, text: StrTendril) -> NodeHandle {
-        self.new_handle(call!(self, create_comment(Utf8Slice::from_str(&text))))
+        self.new_handle(check_pointer(call!(
+            self, create_comment(Utf8Slice::from_str(&text)))))
     }
 
     fn append(&mut self, parent: NodeHandle, child: NodeOrText<NodeHandle>) {
-        match child {
+        check_int(match child {
             NodeOrText::AppendNode(node) => {
                 call!(self, append_node(parent.ptr, node.ptr))
             }
             NodeOrText::AppendText(ref text) => {
                 call!(self, append_text(parent.ptr, Utf8Slice::from_str(text)))
             }
-        }
+        });
     }
 
     fn append_before_sibling(&mut self, sibling: NodeHandle, child: NodeOrText<NodeHandle>)
                              -> Result<(), NodeOrText<NodeHandle>> {
-        let result = match child {
+        let result = check_int(match child {
             NodeOrText::AppendNode(ref node) => {
                 call!(self, insert_node_before_sibling(sibling.ptr, node.ptr))
             }
             NodeOrText::AppendText(ref text) => {
                 call!(self, insert_text_before_sibling(sibling.ptr, Utf8Slice::from_str(text)))
             }
-        };
-        if result == 0 {
+        });
+        if result > 0 {
             Ok(())
         } else {
             Err(child)
@@ -204,10 +206,10 @@ impl TreeSink for CallbackTreeSink {
                                   name: StrTendril,
                                   public_id: StrTendril,
                                   system_id: StrTendril) {
-        call!(self, append_doctype_to_document(
+        check_int(call!(self, append_doctype_to_document(
             Utf8Slice::from_str(&name),
             Utf8Slice::from_str(&public_id),
-            Utf8Slice::from_str(&system_id)))
+            Utf8Slice::from_str(&system_id))));
     }
 
     fn add_attrs_if_missing(&mut self, target: NodeHandle, attrs: Vec<Attribute>) {
@@ -215,11 +217,11 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn remove_from_parent(&mut self, target: NodeHandle) {
-        call!(self, remove_from_parent(target.ptr))
+        check_int(call!(self, remove_from_parent(target.ptr)));
     }
 
     fn reparent_children(&mut self, node: NodeHandle, new_parent: NodeHandle) {
-        call!(self, reparent_children(node.ptr, new_parent.ptr))
+        check_int(call!(self, reparent_children(node.ptr, new_parent.ptr)));
     }
 
     fn mark_script_already_started(&mut self, _target: NodeHandle) {}
@@ -270,9 +272,10 @@ declare_with_callbacks! {
     /// When all references are gone, the node itself can be destroyed.
     /// If this callback is not provided, references are leaked.
     callback destroy_node_ref: Option<extern "C" fn(*const OpaqueParserUserData,
-        *const OpaqueNode)>
+        *const OpaqueNode) -> c_int>
 
-    /// Return a non-zero value if the two given references are for the same node.
+    /// Return a position value if the two given references are for the same node,
+    /// zero for different nodes, and a negative value of an unexpected error.
     /// If this callback is not provided, pointer equality is used.
     callback same_node: Option<extern "C" fn(*const OpaqueParserUserData,
         *const OpaqueNode, *const OpaqueNode) -> c_int>
@@ -282,7 +285,7 @@ declare_with_callbacks! {
     /// The pointer can not be used after the end of this call.
     /// If this callback is not provided, author conformance errors are ignored.
     callback parse_error: Option<extern "C" fn(*const OpaqueParserUserData,
-        Utf8Slice)>
+        Utf8Slice) -> c_int>
 
     /// Create an element node with the given namespace URL and local name.
     /// The qualified name (namespace URL plus local name) is also given in
@@ -308,7 +311,7 @@ declare_with_callbacks! {
     /// to the given element node if the element doesn’t already have
     /// an attribute with that name in that namespace.
     callback add_attribute_if_missing: extern "C" fn(*const OpaqueParserUserData,
-        *const OpaqueNode, Utf8Slice, Utf8Slice, Utf8Slice)
+        *const OpaqueNode, Utf8Slice, Utf8Slice, Utf8Slice) -> c_int
 
     /// Create a comment node.
     callback create_comment: extern "C" fn(*const OpaqueParserUserData,
@@ -316,29 +319,29 @@ declare_with_callbacks! {
 
     /// Create a doctype node and append it to the document.
     callback append_doctype_to_document: extern "C" fn(*const OpaqueParserUserData,
-        Utf8Slice, Utf8Slice, Utf8Slice)
+        Utf8Slice, Utf8Slice, Utf8Slice) -> c_int
 
     callback append_node: extern "C" fn(*const OpaqueParserUserData,
-        *const OpaqueNode, *const OpaqueNode)
+        *const OpaqueNode, *const OpaqueNode) -> c_int
 
     callback append_text: extern "C" fn(*const OpaqueParserUserData,
-        *const OpaqueNode, Utf8Slice)
+        *const OpaqueNode, Utf8Slice) -> c_int
 
-    /// If `sibling` has a parent, insert the given node just before it and return 0.
-    /// Otherwise, do nothing and return a non-zero value.
+    /// If `sibling` has a parent, insert the given node just before it and return 1.
+    /// Otherwise, do nothing and return zero.
     callback insert_node_before_sibling: extern "C" fn(*const OpaqueParserUserData,
         *const OpaqueNode, *const OpaqueNode) -> c_int
 
-    /// If `sibling` has a parent, insert the given text just before it and return 0.
-    /// Otherwise, do nothing and return a non-zero value.
+    /// If `sibling` has a parent, insert the given text just before it and return 1.
+    /// Otherwise, do nothing and return zero.
     callback insert_text_before_sibling: extern "C" fn(*const OpaqueParserUserData,
         *const OpaqueNode, Utf8Slice) -> c_int
 
     callback reparent_children: extern "C" fn(*const OpaqueParserUserData,
-        *const OpaqueNode, *const OpaqueNode)
+        *const OpaqueNode, *const OpaqueNode) -> c_int
 
     callback remove_from_parent: extern "C" fn(*const OpaqueParserUserData,
-        *const OpaqueNode)
+        *const OpaqueNode) -> c_int
 }
 
 #[no_mangle]
@@ -417,4 +420,14 @@ fn catch_panic_int<F: FnOnce() + Send + 'static>(f: F) -> c_int {
         Ok(()) => 0,
         Err(_) => -1,
     }
+}
+
+fn check_int(value: c_int) -> c_int {
+    assert!(value >= 0, "Python exception");
+    value
+}
+
+fn check_pointer<T>(ptr: *const T) -> *const T {
+    assert!(!ptr.is_null(), "Python exception");
+    ptr
 }

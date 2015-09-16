@@ -108,12 +108,13 @@ def get_template_contents(parser, element):
     return parser._template_contents_keep_alive_handles[element]
 
 
-@ffi.callback('void(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice)')
+@ffi.callback('int(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
 def add_attribute_if_missing(_parser, element, namespace_url, local_name, value):
     element = ffi.from_handle(ffi.cast('void*', element))
     element.attributes.setdefault(
         (str_from_slice(namespace_url), str_from_slice(local_name)),
         str_from_slice(value))
+    return 0
 
 
 @ffi.callback('Node*(ParserUserData*, Utf8Slice)')
@@ -122,24 +123,26 @@ def create_comment(parser, data):
     return parser._keep_alive(Comment(str_from_slice(data)))
 
 
-@ffi.callback('void(ParserUserData*, Utf8Slice, Utf8Slice, Utf8Slice)')
+@ffi.callback('int(ParserUserData*, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
 def append_doctype_to_document(parser, name, public_id, system_id):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     parser.document.children.append(Doctype(
         str_from_slice(name),
         str_from_slice(public_id),
         str_from_slice(system_id)))
+    return 0
 
 
-@ffi.callback('void(ParserUserData*, Node*, Node*)')
+@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
 def append_node(_parser, parent, child):
     parent = ffi.from_handle(ffi.cast('void*', parent))
     child = ffi.from_handle(ffi.cast('void*', child))
     child.parent = parent
     parent.children.append(child)
+    return 0
 
 
-@ffi.callback('void(ParserUserData*, Node*, Utf8Slice)')
+@ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1)
 def append_text(_parser, parent, data):
     parent = ffi.from_handle(ffi.cast('void*', parent))
     if parent.children and isinstance(parent.children[-1], Text):
@@ -148,26 +151,27 @@ def append_text(_parser, parent, data):
         child = Text(data)
         child.parent = parent
         parent.children.append(child)
+    return 0
 
 
-@ffi.callback('int(ParserUserData*, Node*, Node*)')
+@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
 def insert_node_before_sibling(_parser, sibling, child):
     sibling = ffi.from_handle(ffi.cast('void*', sibling))
     parent = sibling.parent
     if parent is None:
-        return -1
+        return 0
     child = ffi.from_handle(ffi.cast('void*', child))
     position = parent.children.index(sibling)
     parent.children.insert(position, child)
-    return 0
+    return 1
 
 
-@ffi.callback('int(ParserUserData*, Node*, Utf8Slice)')
+@ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1)
 def insert_text_before_sibling(_parser, sibling, data):
     sibling = ffi.from_handle(ffi.cast('void*', sibling))
     parent = sibling.parent
     if parent is None:
-        return -1
+        return 0
     position = parent.children.index(sibling)
     if position > 0 and isinstance(parent.children[position - 1], Text):
         parent.children[position - 1].data += str_from_slice(data)
@@ -175,23 +179,25 @@ def insert_text_before_sibling(_parser, sibling, data):
         child = Text(data)
         child.parent = parent
         parent.children.insert(position, child)
-    return 0
+    return 1
 
 
-@ffi.callback('void(ParserUserData*, Node*, Node*)')
+@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
 def reparent_children(_parser, parent, new_parent):
     parent = ffi.from_handle(ffi.cast('void*', parent))
     new_parent = ffi.from_handle(ffi.cast('void*', new_parent))
     new_parent.children.extend(parent.children)
     parent.children.clear()
+    return 0
 
 
-@ffi.callback('void(ParserUserData*, Node*)')
+@ffi.callback('int(ParserUserData*, Node*)', error=-1)
 def remove_from_parent(_parser, node):
     node = ffi.from_handle(ffi.cast('void*', node))
     if node.parent is not None:
         node.parent.children.remove(node.parent.children.index(node))
         node.parent = None
+    return 0
 
 
 def check_null(pointer):
