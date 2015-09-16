@@ -1,5 +1,3 @@
-#![feature(box_raw)]
-
 extern crate html5ever;
 extern crate string_cache;
 extern crate tendril;
@@ -60,6 +58,12 @@ struct NodeHandle {
     callbacks: &'static Callbacks,
 }
 
+macro_rules! call {
+    ($self_: expr, $callback: ident ( $( $arg: expr ),* )) => {
+        ($self_.callbacks.$callback)($self_.parser_user_data, $( $arg ),* )
+    };
+}
+
 macro_rules! call_if_some {
     ($self_: expr, $opt_callback: ident ( $( $arg: expr ),* )) => {
         call_if_some!($self_, $opt_callback( $( $arg ),* ) else ())
@@ -108,6 +112,16 @@ impl CallbackTreeSink {
             callbacks: self.callbacks,
         }
     }
+
+    fn add_attributes_if_missing(&self, element: *const OpaqueNode, attributes: Vec<Attribute>) {
+        for attribute in attributes {
+            call!(self, add_attribute_if_missing(
+                element,
+                Utf8Slice::from_str(&attribute.name.ns.0),
+                Utf8Slice::from_str(&attribute.name.local),
+                Utf8Slice::from_str(&attribute.value)));
+        }
+    }
 }
 
 impl TreeSink for CallbackTreeSink {
@@ -134,11 +148,18 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn elem_name(&self, target: NodeHandle) -> QualName {
-        unimplemented!()
+        let ptr = call!(self, element_name(target.ptr));
+        unsafe {
+            (*ptr).clone()
+         }
     }
 
     fn create_element(&mut self, name: QualName, attrs: Vec<Attribute>) -> NodeHandle {
-        unimplemented!()
+        let namespace_url = Utf8Slice::from_str(&name.ns.0);
+        let local_name = Utf8Slice::from_str(&name.local);
+        let element = call!(self, create_element(Box::new(name), namespace_url, local_name));
+        self.add_attributes_if_missing(element, attrs);
+        self.new_handle(element)
     }
 
     fn create_comment(&mut self, text: StrTendril) -> NodeHandle {
@@ -146,7 +167,14 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn append(&mut self, parent: NodeHandle, child: NodeOrText<NodeHandle>) {
-        unimplemented!()
+        match child {
+            NodeOrText::AppendNode(node) => {
+                call!(self, append_node(parent.ptr, node.ptr))
+            }
+            NodeOrText::AppendText(ref text) => {
+                call!(self, append_text(parent.ptr, Utf8Slice::from_str(text)))
+            }
+        }
     }
 
     fn append_before_sibling(&mut self, sibling: NodeHandle, child: NodeOrText<NodeHandle>)
@@ -162,7 +190,7 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn add_attrs_if_missing(&mut self, target: NodeHandle, attrs: Vec<Attribute>) {
-        unimplemented!()
+        self.add_attributes_if_missing(target.ptr, attrs)
     }
 
     fn remove_from_parent(&mut self, target: NodeHandle) {
@@ -233,6 +261,29 @@ declare_with_callbacks! {
     /// If this callback is not provided, author conformance errors are ignored.
     callback parse_error: Option<extern "C" fn(*const OpaqueParserUserData,
         Utf8Slice)>
+
+    /// Create an element node with the given namespace URL and local name.
+    /// The qualified name (namespace URL plus local name) is also given in
+    /// its Rust representation, to be returned in the `element_name` callback.
+    callback create_element: extern "C" fn(*const OpaqueParserUserData,
+        Box<QualName>, Utf8Slice, Utf8Slice) -> *const OpaqueNode
+
+    /// Return the Rust representation of the qualified name of the given element,
+    /// as was given by the `create_element` callback.
+    callback element_name: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode) -> *const QualName
+
+    /// Add the attribute (given as namespace URL, local name, and value)
+    /// to the given element node if the element doesn’t already have
+    /// an attribute with that name in that namespace.
+    callback add_attribute_if_missing: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode, Utf8Slice, Utf8Slice, Utf8Slice)
+
+    callback append_node: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode, *const OpaqueNode)
+
+    callback append_text: extern "C" fn(*const OpaqueParserUserData,
+        *const OpaqueNode, Utf8Slice)
 }
 
 #[no_mangle]
@@ -276,4 +327,9 @@ pub unsafe extern "C" fn end_parser(parser: &mut Parser) {
 pub extern "C" fn destroy_parser(mut parser: Box<Parser>) {
     // Leave `None` behind to protect against double drop.
     mem::drop(parser.opt_tokenizer.take())
+}
+
+#[no_mangle]
+pub extern "C" fn destroy_qualified_name(name: Box<QualName>) {
+    mem::drop(name)
 }

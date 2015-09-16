@@ -24,12 +24,16 @@ def rust_crates(dist, attr, value):
     if isinstance(value, basestring):
         value = [value]
 
+    release = False
+
     for crate, destination in value:
-        args = ['cargo', 'build', '--release', '--manifest-path', os.path.join(crate, 'Cargo.toml')]
+        args = ['cargo', 'build', '--manifest-path', os.path.join(crate, 'Cargo.toml')]
+        if release:
+            args.append('--release')
         log.info(' '.join(args))
         subprocess.check_call(args)
 
-        target = os.path.join(crate, 'target', 'release')
+        target = os.path.join(crate, 'target', 'release' if release else 'debug')
         libs = [name for name in os.listdir(target) if name.endswith(DYNAMIC_LIB_SUFFIX)]
         assert libs
         for lib in libs:

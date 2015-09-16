@@ -16,4 +16,4 @@ def test_parser_gc():
     assert deleted[0]
 
 def test_feed():
-    Parser().feed(b'')
+    Parser().feed(b'a<a>')

@@ -3,15 +3,6 @@ from ._ffi import ffi
 
 capi = ffi.dlopen(os.path.join(os.path.dirname(__file__), 'libhtml5ever_capi.so'))
 
-@ffi.callback('Utf8Slice (*element_name)(ParserUserData*, Node*)')
-def element_name(parser, node):
-    pass
-
-
-CALLBACKS = capi.declare_callbacks(
-    ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL,
-    element_name)
-
 
 class Parser(object):
     def __init__(self):
@@ -47,6 +38,9 @@ class Parser(object):
 
 class Node(object):
     """Abstract base class for all nodes in the tree."""
+    def __init__(self):
+        self.parent = None
+        self.children = []
 
 
 class Document(Node):
@@ -54,4 +48,67 @@ class Document(Node):
 
 
 class Element(Node):
-    """An element node, the root of the tree."""
+    """An element node."""
+    def __init__(self, qualified_name, namespace_url, local_name):
+        super(Element, self).__init__()
+        self.qualified_name = ffi.gc(qualified_name, capi.destroy_qualified_name)
+        self.namespace_url = namespace_url
+        self.local_name = local_name
+        self.attributes = {}
+
+
+class Text(Node):
+    """A text node."""
+    def __init__(self, data):
+        super(Text, self).__init__()
+        self.data = data
+
+
+def str_from_slice(slice_):
+    return ffi.buffer(slice_.ptr, slice_.len)[:].decode('utf-8')
+
+
+@ffi.callback('Node*(ParserUserData*, QualifiedName*, Utf8Slice, Utf8Slice)')
+def create_element(parser, qualified_name, namespace_url, local_name):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
+    return parser._keep_alive(Element(
+        qualified_name, str_from_slice(namespace_url), str_from_slice(local_name)))
+
+
+@ffi.callback('QualifiedName*(ParserUserData*, Node*)')
+def element_name(_parser, element):
+    element = ffi.from_handle(ffi.cast('void*', element))
+    return element.qualified_name
+
+
+@ffi.callback('void(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice)')
+def add_attribute_if_missing(_parser, element, namespace_url, local_name, value):
+    element = ffi.from_handle(ffi.cast('void*', element))
+    element.attributes.setdefault(
+        (str_from_slice(namespace_url), str_from_slice(local_name)),
+        str_from_slice(value))
+
+
+@ffi.callback('void(ParserUserData*, Node*, Node*)')
+def append_node(_parser, parent, child):
+    parent = ffi.from_handle(ffi.cast('void*', parent))
+    child = ffi.from_handle(ffi.cast('void*', child))
+    child.parent = parent
+    parent.children.append(child)
+
+
+@ffi.callback('void(ParserUserData*, Node*, Utf8Slice)')
+def append_text(_parser, parent, data):
+    parent = ffi.from_handle(ffi.cast('void*', parent))
+    if parent.children and isinstance(parent.children[-1], Text):
+        parent.children[-1].data += str_from_slice(data)
+    else:
+        child = Text(data)
+        child.parent = parent
+        parent.children.append(child)
+
+
+CALLBACKS = capi.declare_callbacks(
+    ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL,
+    create_element, element_name, add_attribute_if_missing,
+    append_node, append_text)
