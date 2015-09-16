@@ -28,6 +28,8 @@ ffi.cdef('''
         Node* (*get_template_contents)(ParserUserData*, Node*),
         void (*add_attribute_if_missing)(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice),
 
+        Node* (*create_comment)(ParserUserData*, Utf8Slice),
+
         void(*append_node)(ParserUserData*, Node*, Node*),
         void(*append_text)(ParserUserData*, Node*, Utf8Slice)
     );

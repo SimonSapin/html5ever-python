@@ -163,7 +163,7 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn create_comment(&mut self, text: StrTendril) -> NodeHandle {
-        unimplemented!()
+        self.new_handle(call!(self, create_comment(Utf8Slice::from_str(&text))))
     }
 
     fn append(&mut self, parent: NodeHandle, child: NodeOrText<NodeHandle>) {
@@ -287,6 +287,10 @@ declare_with_callbacks! {
     /// an attribute with that name in that namespace.
     callback add_attribute_if_missing: extern "C" fn(*const OpaqueParserUserData,
         *const OpaqueNode, Utf8Slice, Utf8Slice, Utf8Slice)
+
+    /// Create a comment node.
+    callback create_comment: extern "C" fn(*const OpaqueParserUserData,
+        Utf8Slice) -> *const OpaqueNode
 
     callback append_node: extern "C" fn(*const OpaqueParserUserData,
         *const OpaqueNode, *const OpaqueNode)

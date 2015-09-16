@@ -72,6 +72,13 @@ class Text(Node):
         self.data = data
 
 
+class Comment(Node):
+    '''A comment node.'''
+    def __init__(self, data):
+        super(Text, self).__init__()
+        self.data = data
+
+
 def str_from_slice(slice_):
     return ffi.buffer(slice_.ptr, slice_.len)[:].decode('utf-8')
 
@@ -107,6 +114,12 @@ def add_attribute_if_missing(_parser, element, namespace_url, local_name, value)
         str_from_slice(value))
 
 
+@ffi.callback('Node*(ParserUserData*, Utf8Slice)')
+def create_comment(parser, data):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
+    parser._keep_alive(Comment(str_from_slice(data)))
+
+
 @ffi.callback('void(ParserUserData*, Node*, Node*)')
 def append_node(_parser, parent, child):
     parent = ffi.from_handle(ffi.cast('void*', parent))
@@ -129,4 +142,5 @@ def append_text(_parser, parent, data):
 CALLBACKS = capi.declare_callbacks(
     ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL,
     create_element, element_name, get_template_contents, add_attribute_if_missing,
+    create_comment,
     append_node, append_text)
