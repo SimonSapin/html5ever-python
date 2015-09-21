@@ -161,10 +161,11 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn create_element(&mut self, name: QualName, attrs: Vec<Attribute>) -> NodeHandle {
+        let name = Box::new(name);
         let namespace_url = Utf8Slice::from_str(&name.ns.0);
         let local_name = Utf8Slice::from_str(&name.local);
         let element = check_pointer(call!(
-            self, create_element(Box::new(name), namespace_url, local_name)));
+            self, create_element(name, namespace_url, local_name)));
         self.add_attributes_if_missing(element, attrs);
         self.new_handle(element)
     }
