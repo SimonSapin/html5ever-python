@@ -1,3 +1,5 @@
+VENV = ~/.virtualenvs/html5ever
+
 test:
-	@python setup.py -q develop
-	@py.test -q
+	@${VENV}/bin/python setup.py -q develop
+	@${VENV}/bin/py.test -q
