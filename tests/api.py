@@ -1,5 +1,5 @@
 import gc
-from html5ever import Parser
+from html5ever import Parser, parse
 
 def test_parser_gc():
     deleted = [False]
@@ -17,3 +17,6 @@ def test_parser_gc():
 
 def test_feed():
     Parser().feed(b'a<a>')
+
+def test_parse():
+    parse(b'a<a>')

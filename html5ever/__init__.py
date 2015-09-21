@@ -4,6 +4,12 @@ from ._ffi import ffi
 capi = ffi.dlopen(os.path.join(os.path.dirname(__file__), 'libhtml5ever_capi.so'))
 
 
+def parse(bytes):
+    parser = Parser()
+    parser.feed(bytes)
+    return parser.document
+
+
 class Parser(object):
     def __init__(self):
         self._keep_alive_handles = []
