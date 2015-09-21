@@ -139,8 +139,8 @@ def create_comment(parser, data):
     return parser._keep_alive(Comment(str_from_slice(data)))
 
 
-@ffi.callback('int(ParserUserData*, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
-def append_doctype_to_document(parser, name, public_id, system_id):
+@ffi.callback('int(ParserUserData*, uintptr_t, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
+def append_doctype_to_document(parser, _dummy, name, public_id, system_id):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     parser.document.children.append(Doctype(
         str_from_slice(name),

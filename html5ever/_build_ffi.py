@@ -28,7 +28,7 @@ ffi.cdef('''
         Node* (*get_template_contents)(ParserUserData*, Node*),
         int (*add_attribute_if_missing)(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice),
         Node* (*create_comment)(ParserUserData*, Utf8Slice),
-        int (*append_doctype_to_document)(ParserUserData*, Utf8Slice, Utf8Slice, Utf8Slice),
+        int (*append_doctype_to_document)(ParserUserData*, uintptr_t, Utf8Slice, Utf8Slice, Utf8Slice),
 
         int (*append_node)(ParserUserData*, Node*, Node*),
         int (*append_text)(ParserUserData*, Node*, Utf8Slice),

@@ -16,7 +16,7 @@ use tendril::StrTendril;
 
 /// When given as a function parameter, only valid for the duration of the call.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[allow(raw_pointer_derive)]
 pub struct BytesSlice {
     ptr: *const u8,
@@ -38,7 +38,7 @@ impl BytesSlice {
 
 /// When given as a function parameter, only valid for the duration of the call.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Utf8Slice(BytesSlice);
 
 impl Utf8Slice {
@@ -207,6 +207,7 @@ impl TreeSink for CallbackTreeSink {
                                   public_id: StrTendril,
                                   system_id: StrTendril) {
         check_int(call!(self, append_doctype_to_document(
+            0,
             Utf8Slice::from_str(&name),
             Utf8Slice::from_str(&public_id),
             Utf8Slice::from_str(&system_id))));
@@ -319,6 +320,9 @@ declare_with_callbacks! {
 
     /// Create a doctype node and append it to the document.
     callback append_doctype_to_document: extern "C" fn(*const OpaqueParserUserData,
+        // Work around https://github.com/rust-lang/rust/pull/27017
+        // Add some padding so that the last Utf8Slice is not split between registers and the stack.
+        usize,
         Utf8Slice, Utf8Slice, Utf8Slice) -> c_int
 
     callback append_node: extern "C" fn(*const OpaqueParserUserData,
