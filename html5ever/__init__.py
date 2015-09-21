@@ -83,8 +83,17 @@ class Text(Node):
 class Comment(Node):
     '''A comment node.'''
     def __init__(self, data):
-        super(Text, self).__init__()
+        super(Comment, self).__init__()
         self.data = data
+
+
+class Doctype(Node):
+    '''A doctype node.'''
+    def __init__(self, name, public_id, system_id):
+        super(Doctype, self).__init__()
+        self.name = name
+        self.public_id = public_id
+        self.system_id = system_id
 
 
 def str_from_slice(slice_):
@@ -97,7 +106,8 @@ def create_element(parser, qualified_name, namespace_url, local_name):
     element = Element(qualified_name, str_from_slice(namespace_url), str_from_slice(local_name))
     if element.name == (HTML_NAMESPACE, 'template'):
         element.template_contents = DocumentFragment()
-        parser._template_contents_keep_alive_handles[element] = ffi.new_handle(template_contents)
+        parser._template_contents_keep_alive_handles[element] = \
+            ffi.new_handle(element.template_contents)
     return parser._keep_alive(element)
 
 
@@ -151,8 +161,9 @@ def append_node(_parser, parent, child):
 @ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1)
 def append_text(_parser, parent, data):
     parent = ffi.from_handle(ffi.cast('void*', parent))
+    data = str_from_slice(data)
     if parent.children and isinstance(parent.children[-1], Text):
-        parent.children[-1].data += str_from_slice(data)
+        parent.children[-1].data += data
     else:
         child = Text(data)
         child.parent = parent
@@ -178,9 +189,10 @@ def insert_text_before_sibling(_parser, sibling, data):
     parent = sibling.parent
     if parent is None:
         return 0
+    data = str_from_slice(data)
     position = parent.children.index(sibling)
     if position > 0 and isinstance(parent.children[position - 1], Text):
-        parent.children[position - 1].data += str_from_slice(data)
+        parent.children[position - 1].data += data
     else:
         child = Text(data)
         child.parent = parent
@@ -192,6 +204,8 @@ def insert_text_before_sibling(_parser, sibling, data):
 def reparent_children(_parser, parent, new_parent):
     parent = ffi.from_handle(ffi.cast('void*', parent))
     new_parent = ffi.from_handle(ffi.cast('void*', new_parent))
+    for child in parent.children:
+        child.parent = new_parent
     new_parent.children.extend(parent.children)
     parent.children.clear()
     return 0
@@ -201,7 +215,7 @@ def reparent_children(_parser, parent, new_parent):
 def remove_from_parent(_parser, node):
     node = ffi.from_handle(ffi.cast('void*', node))
     if node.parent is not None:
-        node.parent.children.remove(node.parent.children.index(node))
+        node.parent.children.remove(node)
         node.parent = None
     return 0
 
