@@ -41,6 +41,7 @@ ffi.cdef('''
     Parser* new_parser(Callbacks*, ParserUserData*, Node*);
     int destroy_parser(Parser*);
     int feed_parser(Parser*, BytesSlice);
+    int end_parser(Parser*);
     int destroy_qualified_name(QualifiedName*);
 
 ''')

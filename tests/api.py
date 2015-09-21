@@ -8,7 +8,7 @@ def test_parser_gc():
             deleted[0] = True
 
     parser = Parser()
-    parser.document.record_del = RecordDel()
+    parser._document.record_del = RecordDel()
     assert not deleted[0]
 
     del parser

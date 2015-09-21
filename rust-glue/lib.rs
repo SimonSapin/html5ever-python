@@ -395,16 +395,16 @@ pub unsafe extern "C" fn end_parser(parser: &mut Parser) -> c_int {
     let parser = ParserMutPtr(parser);
     catch_panic_int(move || {
         let parser = &mut *parser.0;
+        // Leave `None` behind to drop the tokenizer and tree builder now.
         let mut tokenizer = unwrap_or_return!(parser.opt_tokenizer.take());
         tokenizer.end();
     })
 }
 
 #[no_mangle]
-pub extern "C" fn destroy_parser(mut parser: Box<Parser>) -> c_int {
+pub extern "C" fn destroy_parser(parser: Box<Parser>) -> c_int {
     catch_panic_int(move || {
-        // Leave `None` behind to protect against double drop.
-        mem::drop(parser.opt_tokenizer.take())
+        mem::drop(parser)
     })
 }
 

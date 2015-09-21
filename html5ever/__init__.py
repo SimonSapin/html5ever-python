@@ -7,16 +7,16 @@ capi = ffi.dlopen(os.path.join(os.path.dirname(__file__), 'libhtml5ever_capi.so'
 def parse(bytes):
     parser = Parser()
     parser.feed(bytes)
-    return parser.document
+    return parser.end()
 
 
 class Parser(object):
     def __init__(self):
         self._keep_alive_handles = []
         self._template_contents_keep_alive_handles = {}
-        self.document = Document()
+        self._document = Document()
         self._ptr = check_null(capi.new_parser(
-            CALLBACKS, self._keep_alive(self), self._keep_alive(self.document)))
+            CALLBACKS, self._keep_alive(self), self._keep_alive(self._document)))
 
     def __del__(self):
         # Do this here rather than through ffi.gc:
@@ -27,6 +27,12 @@ class Parser(object):
         data = ffi.new('char[]', bytes_chunk)
         slice_ = ffi.new('BytesSlice*', (data, len(bytes_chunk)))
         check_int(capi.feed_parser(self._ptr, slice_[0]))
+
+    def end(self):
+        check_int(capi.end_parser(self._ptr))
+        self._keep_alive_handles.clear()
+        self._template_contents_keep_alive_handles.clear()
+        return self._document
 
     def _keep_alive(self, obj):
         '''
@@ -147,7 +153,7 @@ def create_comment(parser, data):
 @ffi.callback('int(ParserUserData*, uintptr_t, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
 def append_doctype_to_document(parser, _dummy, name, public_id, system_id):
     parser = ffi.from_handle(ffi.cast('void*', parser))
-    parser.document.children.append(Doctype(
+    parser._document.children.append(Doctype(
         str_from_slice(name),
         str_from_slice(public_id),
         str_from_slice(system_id)))
