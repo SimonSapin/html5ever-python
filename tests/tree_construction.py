@@ -90,19 +90,19 @@ def serialize(node, indent=1):
 
     if isinstance(node, Doctype):
         yield '<!DOCTYPE '
-        yield node.name
+        yield node.name.decode('utf8')
         if node.public_id or node.system_id:
-            yield ' "%s" "%s"' % (node.public_id, node.system_id)
+            yield ' "%s" "%s"' % (node.public_id.decode('utf8'), node.system_id.decode('utf8'))
         yield '>\n'
 
     elif isinstance(node, Text):
         yield '"'
-        yield node.data
+        yield node.data.decode('utf8')
         yield '"\n'
 
     elif isinstance(node, Comment):
         yield '<!-- '
-        yield node.data
+        yield node.data.decode('utf8')
         yield ' -->\n'
 
     else:
@@ -115,7 +115,7 @@ def serialize(node, indent=1):
             yield 'math '
         else:
             assert namespace_url == HTML_NAMESPACE
-        yield local_name
+        yield local_name.decode('utf8')
         yield '>\n'
 
         for (namespace_url, local_name), value in sorted(node.attributes.items()):
@@ -129,7 +129,7 @@ def serialize(node, indent=1):
                 yield 'xmlns '
             else:
                 assert not namespace_url
-            yield '%s="%s"\n' % (local_name, value)
+            yield '%s="%s"\n' % (local_name.decode('utf8'), value.decode('utf8'))
 
     for child in node.children:
         for text in serialize(child, indent + 2):

@@ -62,12 +62,12 @@ class DocumentFragment(Node):
     '''A document fragement node.'''
 
 
-HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml'
-MATHML_NAMESPACE = 'http://www.w3.org/1998/Math/MathML'
-SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
-XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink'
-XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace'
-XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/'
+HTML_NAMESPACE = b'http://www.w3.org/1999/xhtml'
+MATHML_NAMESPACE = b'http://www.w3.org/1998/Math/MathML'
+SVG_NAMESPACE = b'http://www.w3.org/2000/svg'
+XLINK_NAMESPACE = b'http://www.w3.org/1999/xlink'
+XML_NAMESPACE = b'http://www.w3.org/XML/1998/namespace'
+XMLNS_NAMESPACE = b'http://www.w3.org/2000/xmlns/'
 
 
 class Element(Node):
@@ -103,14 +103,14 @@ class Doctype(Node):
 
 
 def str_from_slice(slice_):
-    return ffi.buffer(slice_.ptr, slice_.len)[:].decode('utf-8')
+    return ffi.buffer(slice_.ptr, slice_.len)[:]
 
 
 @ffi.callback('Node*(ParserUserData*, Utf8Slice, Utf8Slice)')
 def create_element(parser, namespace_url, local_name):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     element = Element(str_from_slice(namespace_url), str_from_slice(local_name))
-    if element.name == (HTML_NAMESPACE, 'template'):
+    if element.name == (HTML_NAMESPACE, b'template'):
         element.template_contents = DocumentFragment()
         parser._template_contents_keep_alive_handles[element] = \
             ffi.new_handle(element.template_contents)
