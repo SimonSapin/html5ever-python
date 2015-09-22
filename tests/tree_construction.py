@@ -63,7 +63,7 @@ def serialize(node, indent=1):
         yield '<!DOCTYPE '
         yield node.name
         if node.public_id or node.system_id:
-            yield ' "%s" "%s"' % (public, system)
+            yield ' "%s" "%s"' % (node.public_id, node.system_id)
         yield '>\n'
 
     elif isinstance(node, Text):
