@@ -4,9 +4,9 @@ from html5ever import *
 
 
 def test_tree_construction(test):
-    document = parse(test[b'data'].rstrip(b'\n'))
-    serialized = ''.join(serialize(document)).rstrip('\n')
-    expected = test[b'document'].rstrip(b'\n').decode('utf8')
+    document = parse(test[b'data'])
+    serialized = ''.join(serialize(document))[:-1]  # Drop the trailing newline
+    expected = test[b'document'].decode('utf8')
     if serialized != expected:
         pprint.pprint(test)
         print(serialized)
@@ -28,26 +28,29 @@ def pytest_generate_tests(metafunc):
 
 
 def parse_tests(fd):
-    assert next(iter(fd)).rstrip() == b'#data'
-    key = b'data'
-    value = b''
+    key = None
+    lines = []
     test = {}
     for line in fd:
+        line = line.rstrip(b'\n')
         if line.startswith(b'#'):
-            assert key not in test
-            test[key] = value
-            value = b''
+            if line == b'#data' and lines and not lines[-1]:
+                lines.pop()  # Drop the empty line separating tests
+            if key:
+                assert key not in test
+                test[key] = b'\n'.join(lines)
+            lines = []
             key = line.rstrip()[1:]
-            if key == b'data':
-                assert test
+            if key == b'data' and test:
                 yield test
                 test = {}
         else:
-            value += line
-    assert test
-    assert key not in test
-    test[key] = value
-    yield test
+            lines.append(line)
+    if key:
+        assert key not in test
+        test[key] = b'\n'.join(lines)
+    if test:
+        yield test
 
 
 def serialize(node, indent=1):
