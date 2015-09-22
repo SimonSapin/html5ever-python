@@ -24,7 +24,7 @@ def rust_crates(dist, attr, value):
     if isinstance(value, basestring):
         value = [value]
 
-    release = False
+    release = True
 
     for crate, destination in value:
         args = ['cargo', 'build', '--manifest-path', os.path.join(crate, 'Cargo.toml')]
