@@ -15,13 +15,10 @@ class Parser(object):
         self._keep_alive_handles = []
         self._template_contents_keep_alive_handles = {}
         self._document = Document()
-        self._ptr = check_null(capi.new_parser(
-            CALLBACKS, self._keep_alive(self), self._keep_alive(self._document)))
-
-    def __del__(self):
-        # Do this here rather than through ffi.gc:
-        # by the time ffi.gc would trigger, self.refcounts might have been removed already.
-        check_int(capi.destroy_parser(self._ptr))
+        self._ptr = ffi.gc(
+            check_null(capi.new_parser(
+                CALLBACKS, self._keep_alive(self), self._keep_alive(self._document))),
+            lambda ptr: check_int(capi.destroy_parser(ptr)))
 
     def feed(self, bytes_chunk):
         data = ffi.new('char[]', bytes_chunk)
@@ -32,6 +29,7 @@ class Parser(object):
         check_int(capi.end_parser(self._ptr))
         self._keep_alive_handles.clear()
         self._template_contents_keep_alive_handles.clear()
+        self._ptr = None
         return self._document
 
     def _keep_alive(self, obj):

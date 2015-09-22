@@ -100,7 +100,7 @@ struct CallbackTreeSink {
 }
 
 pub struct Parser {
-    opt_tokenizer: Option<Tokenizer<TreeBuilder<NodeHandle, CallbackTreeSink>>>
+    tokenizer: Tokenizer<TreeBuilder<NodeHandle, CallbackTreeSink>>
 }
 
 struct ParserMutPtr(*mut Parser);
@@ -228,17 +228,6 @@ impl TreeSink for CallbackTreeSink {
 
     fn mark_script_already_started(&mut self, _target: NodeHandle) {}
 }
-
-macro_rules! unwrap_or_return {
-    ($e: expr) => {
-        match $e {
-            Some(value) => value,
-            None => return  // FIXME: signal error somehow
-        }
-    }
-}
-
-// FIXME: catch panics
 
 macro_rules! declare_with_callbacks {
     ($( $( #[$attr:meta] )* callback $name: ident: $ty: ty )+) => {
@@ -373,7 +362,7 @@ pub extern "C" fn new_parser(callbacks: &'static Callbacks,
         let tree_builder = TreeBuilder::new(sink, Default::default());
         let tokenizer = Tokenizer::new(tree_builder, Default::default());
         Box::new(Parser {
-            opt_tokenizer: Some(tokenizer)
+            tokenizer: tokenizer
         })
     })
 }
@@ -383,11 +372,10 @@ pub unsafe extern "C" fn feed_parser(parser: &mut Parser, chunk: BytesSlice) -> 
     let parser = ParserMutPtr(parser);
     catch_panic_int(move || {
         let parser = &mut *parser.0;
-        let tokenizer = unwrap_or_return!(parser.opt_tokenizer.as_mut());
         // FIXME: Support UTF-8 byte sequences split across chunk boundary
         // FIXME: Go through the data once here instead of twice.
         let string = String::from_utf8_lossy(chunk.as_slice());
-        tokenizer.feed((&*string).into())
+        parser.tokenizer.feed((&*string).into())
     })
 }
 
@@ -396,9 +384,7 @@ pub unsafe extern "C" fn end_parser(parser: &mut Parser) -> c_int {
     let parser = ParserMutPtr(parser);
     catch_panic_int(move || {
         let parser = &mut *parser.0;
-        // Leave `None` behind to drop the tokenizer and tree builder now.
-        let mut tokenizer = unwrap_or_return!(parser.opt_tokenizer.take());
-        tokenizer.end();
+        parser.tokenizer.end();
     })
 }
 
