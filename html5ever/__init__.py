@@ -73,7 +73,8 @@ XMLNS_NAMESPACE = b'http://www.w3.org/2000/xmlns/'
 class Element(Node):
     '''An element node.'''
     def __init__(self, namespace_url, local_name):
-        super(Element, self).__init__()
+        self.parent = None
+        self.children = []
         self.name = (namespace_url, local_name)
         self.attributes = {}
         self.template_contents = None
@@ -82,21 +83,21 @@ class Element(Node):
 class Text(Node):
     '''A text node.'''
     def __init__(self, data):
-        super(Text, self).__init__()
+        self.parent = None
         self.data = data
 
 
 class Comment(Node):
     '''A comment node.'''
     def __init__(self, data):
-        super(Comment, self).__init__()
+        self.parent = None
         self.data = data
 
 
 class Doctype(Node):
     '''A doctype node.'''
     def __init__(self, name, public_id, system_id):
-        super(Doctype, self).__init__()
+        self.parent = None
         self.name = name
         self.public_id = public_id
         self.system_id = system_id

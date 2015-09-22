@@ -131,14 +131,14 @@ def serialize(node, indent=1):
                 assert not namespace_url
             yield '%s="%s"\n' % (local_name.decode('utf8'), value.decode('utf8'))
 
-    for child in node.children:
-        for text in serialize(child, indent + 2):
-            yield text
-
-    if isinstance(node, Element) and node.template_contents:
-        yield '|'
-        yield ' ' * (indent + 2)
-        yield 'content\n'
-        for child in node.template_contents.children:
-            for text in serialize(child, indent + 4):
+        for child in node.children:
+            for text in serialize(child, indent + 2):
                 yield text
+
+        if node.template_contents:
+            yield '|'
+            yield ' ' * (indent + 2)
+            yield 'content\n'
+            for child in node.template_contents.children:
+                for text in serialize(child, indent + 4):
+                    yield text
