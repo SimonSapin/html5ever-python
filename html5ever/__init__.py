@@ -14,6 +14,7 @@ class Parser(object):
     def __init__(self):
         self._keep_alive_handles = []
         self._template_contents_keep_alive_handles = {}
+        self._element_qualified_names = {}
         self._document = Document()
         self._ptr = ffi.gc(
             check_null(capi.new_parser(
@@ -72,11 +73,8 @@ XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/'
 
 class Element(Node):
     '''An element node.'''
-    def __init__(self, qualified_name, namespace_url, local_name):
+    def __init__(self, namespace_url, local_name):
         super(Element, self).__init__()
-        self.qualified_name = ffi.gc(
-            qualified_name,
-            lambda q: check_int(capi.destroy_qualified_name(q)))
         self.name = (namespace_url, local_name)
         self.attributes = {}
         self.template_contents = None
@@ -112,7 +110,10 @@ def str_from_slice(slice_):
 @ffi.callback('Node*(ParserUserData*, QualifiedName*, Utf8Slice, Utf8Slice)')
 def create_element(parser, qualified_name, namespace_url, local_name):
     parser = ffi.from_handle(ffi.cast('void*', parser))
-    element = Element(qualified_name, str_from_slice(namespace_url), str_from_slice(local_name))
+    element = Element(str_from_slice(namespace_url), str_from_slice(local_name))
+    parser._element_qualified_names[element] = ffi.gc(
+        qualified_name,
+        lambda q: check_int(capi.destroy_qualified_name(q)))
     if element.name == (HTML_NAMESPACE, 'template'):
         element.template_contents = DocumentFragment()
         parser._template_contents_keep_alive_handles[element] = \
@@ -121,9 +122,10 @@ def create_element(parser, qualified_name, namespace_url, local_name):
 
 
 @ffi.callback('QualifiedName*(ParserUserData*, Node*)')
-def element_name(_parser, element):
+def element_name(parser, element):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
     element = ffi.from_handle(ffi.cast('void*', element))
-    return element.qualified_name
+    return parser._element_qualified_names[element]
 
 
 @ffi.callback('Node*(ParserUserData*, Node*)')
