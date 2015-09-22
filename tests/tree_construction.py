@@ -1,5 +1,6 @@
 import os.path
 import pprint
+import pytest
 from html5ever import *
 
 
@@ -15,6 +16,27 @@ def test_tree_construction(test):
 
 
 def pytest_generate_tests(metafunc):
+    # https://github.com/servo/html5ever/blob/v0.2.4/data/test/ignore
+    ignore = set('''
+        ruby.dat-0
+        ruby.dat-1
+        ruby.dat-10
+        ruby.dat-12
+        ruby.dat-13
+        ruby.dat-15
+        ruby.dat-17
+        ruby.dat-2
+        ruby.dat-20
+        ruby.dat-3
+        ruby.dat-5
+        ruby.dat-7
+        tests19.dat-18
+        tests19.dat-21
+        tests20.dat-34
+        tests20.dat-35
+        tests20.dat-36
+        tests20.dat-37
+    '''.split())
     tests = []
     ids = []
     base = os.path.join(os.path.dirname(__file__), 'html5lib-tests', 'tree-construction')
@@ -22,8 +44,11 @@ def pytest_generate_tests(metafunc):
         if name.endswith('.dat'):
             with open(os.path.join(base, name), 'rb') as fd:
                 for i, test in enumerate(parse_tests(fd)):
+                    id_ = '%s-%s' % (name, i)
+                    ids.append(id_)
+                    if b'document-fragment' in test or b'script-off' in test or id_ in ignore:
+                        test = pytest.mark.xfail(test)
                     tests.append(test)
-                    ids.append('%s-%s' % (name, i))
     metafunc.parametrize('test', tests, ids=ids)
 
 
