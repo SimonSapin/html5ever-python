@@ -14,7 +14,6 @@ class Parser(object):
     def __init__(self):
         self._keep_alive_handles = []
         self._template_contents_keep_alive_handles = {}
-        self._element_qualified_names = {}
         self._document = Document()
         self._ptr = ffi.gc(
             check_null(capi.new_parser(
@@ -107,25 +106,15 @@ def str_from_slice(slice_):
     return ffi.buffer(slice_.ptr, slice_.len)[:].decode('utf-8')
 
 
-@ffi.callback('Node*(ParserUserData*, QualifiedName*, Utf8Slice, Utf8Slice)')
-def create_element(parser, qualified_name, namespace_url, local_name):
+@ffi.callback('Node*(ParserUserData*, Utf8Slice, Utf8Slice)')
+def create_element(parser, namespace_url, local_name):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     element = Element(str_from_slice(namespace_url), str_from_slice(local_name))
-    parser._element_qualified_names[element] = ffi.gc(
-        qualified_name,
-        lambda q: check_int(capi.destroy_qualified_name(q)))
     if element.name == (HTML_NAMESPACE, 'template'):
         element.template_contents = DocumentFragment()
         parser._template_contents_keep_alive_handles[element] = \
             ffi.new_handle(element.template_contents)
     return parser._keep_alive(element)
-
-
-@ffi.callback('QualifiedName*(ParserUserData*, Node*)')
-def element_name(parser, element):
-    parser = ffi.from_handle(ffi.cast('void*', parser))
-    element = ffi.from_handle(ffi.cast('void*', element))
-    return parser._element_qualified_names[element]
 
 
 @ffi.callback('Node*(ParserUserData*, Node*)')
@@ -251,7 +240,7 @@ class RustPanic(Exception):
 
 CALLBACKS = check_null(capi.declare_callbacks(
     ffi.NULL, ffi.NULL, ffi.NULL, ffi.NULL,
-    create_element, element_name, get_template_contents, add_attribute_if_missing,
+    create_element, get_template_contents, add_attribute_if_missing,
     create_comment, append_doctype_to_document,
     append_node, append_text, insert_node_before_sibling, insert_text_before_sibling,
     reparent_children, remove_from_parent))

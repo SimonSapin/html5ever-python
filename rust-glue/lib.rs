@@ -55,6 +55,7 @@ struct NodeHandle {
     ptr: *const OpaqueNode,
     parser_user_data: *const OpaqueParserUserData,
     callbacks: &'static Callbacks,
+    qualified_name: Option<QualName>,
 }
 
 macro_rules! call {
@@ -82,6 +83,7 @@ impl Clone for NodeHandle {
             ptr: check_pointer(call_if_some!(self, clone_node_ref(self.ptr) else self.ptr)),
             parser_user_data: self.parser_user_data,
             callbacks: self.callbacks,
+            qualified_name: self.qualified_name.clone(),
         }
     }
 }
@@ -116,6 +118,7 @@ impl CallbackTreeSink {
             ptr: ptr,
             parser_user_data: self.parser_user_data,
             callbacks: self.callbacks,
+            qualified_name: None,
         }
     }
 
@@ -154,20 +157,17 @@ impl TreeSink for CallbackTreeSink {
     }
 
     fn elem_name(&self, target: NodeHandle) -> QualName {
-        let ptr = check_pointer(call!(self, element_name(target.ptr)));
-        unsafe {
-            (*ptr).clone()
-         }
+        target.qualified_name.as_ref().unwrap().clone()
     }
 
     fn create_element(&mut self, name: QualName, attrs: Vec<Attribute>) -> NodeHandle {
-        let name = Box::new(name);
         let namespace_url = Utf8Slice::from_str(&name.ns.0);
         let local_name = Utf8Slice::from_str(&name.local);
-        let element = check_pointer(call!(
-            self, create_element(name, namespace_url, local_name)));
+        let element = check_pointer(call!(self, create_element(namespace_url, local_name)));
         self.add_attributes_if_missing(element, attrs);
-        self.new_handle(element)
+        let mut handle = self.new_handle(element);
+        handle.qualified_name = Some(name);
+        handle
     }
 
     fn create_comment(&mut self, text: StrTendril) -> NodeHandle {
@@ -279,18 +279,11 @@ declare_with_callbacks! {
         Utf8Slice) -> c_int>
 
     /// Create an element node with the given namespace URL and local name.
-    /// The qualified name (namespace URL plus local name) is also given in
-    /// its Rust representation, to be returned in the `element_name` callback.
     ///
     /// If the element in `template` element in the HTML namespace,
     /// an associated document fragment node should be created for the template contents.
     callback create_element: extern "C" fn(*const OpaqueParserUserData,
-        Box<QualName>, Utf8Slice, Utf8Slice) -> *const OpaqueNode
-
-    /// Return the Rust representation of the qualified name of the given element,
-    /// as was given by the `create_element` callback.
-    callback element_name: extern "C" fn(*const OpaqueParserUserData,
-        *const OpaqueNode) -> *const QualName
+        Utf8Slice, Utf8Slice) -> *const OpaqueNode
 
     /// Return a reference to the document fragment node for the template contents.
     ///
@@ -356,6 +349,7 @@ pub extern "C" fn new_parser(callbacks: &'static Callbacks,
                 ptr: document,
                 parser_user_data: data,
                 callbacks: callbacks,
+                qualified_name: None,
             },
             quirks_mode: QuirksMode::NoQuirks,
         };

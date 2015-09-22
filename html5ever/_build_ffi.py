@@ -7,7 +7,6 @@ ffi.cdef('''
     typedef ... Callbacks;
     typedef ... ParserUserData;
     typedef ... Node;
-    typedef ... QualifiedName;
     typedef ... Parser;
 
     typedef struct {
@@ -23,8 +22,7 @@ ffi.cdef('''
         int (*same_node)(ParserUserData*, Node*, Node*),
         int (*parse_error)(ParserUserData*, Utf8Slice),
 
-        Node* (*create_element)(ParserUserData*, QualifiedName*, Utf8Slice, Utf8Slice),
-        QualifiedName* (*element_name)(ParserUserData*, Node*),
+        Node* (*create_element)(ParserUserData*, Utf8Slice, Utf8Slice),
         Node* (*get_template_contents)(ParserUserData*, Node*),
         int (*add_attribute_if_missing)(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice),
         Node* (*create_comment)(ParserUserData*, Utf8Slice),
@@ -42,7 +40,6 @@ ffi.cdef('''
     int destroy_parser(Parser*);
     int feed_parser(Parser*, BytesSlice);
     int end_parser(Parser*);
-    int destroy_qualified_name(QualifiedName*);
 
 ''')
 
