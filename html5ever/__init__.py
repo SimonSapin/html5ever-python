@@ -27,8 +27,8 @@ class Parser(object):
 
     def end(self):
         check_int(capi.end_parser(self._ptr))
-        self._keep_alive_handles.clear()
-        self._template_contents_keep_alive_handles.clear()
+        self._keep_alive_handles = None
+        self._template_contents_keep_alive_handles = None
         self._ptr = None
         return self._document
 
@@ -39,7 +39,7 @@ class Parser(object):
 
         For nodes, we could use a reference counting scheme here with the `clone_node_ref`
         and `destroy_node_ref` callbacks, but that would only help with nodes
-        created by the parser that don’t end up in the tree (to free them early),
+        created by the parser that don't end up in the tree (to free them early),
         which is probably rare if it happens at all.
         '''
         handle = ffi.new_handle(obj)
@@ -207,7 +207,7 @@ def reparent_children(_parser, parent, new_parent):
     for child in parent.children:
         child.parent = new_parent
     new_parent.children.extend(parent.children)
-    parent.children.clear()
+    parent.children = []
     return 0
 
 

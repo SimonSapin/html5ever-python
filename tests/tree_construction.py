@@ -81,7 +81,8 @@ def parse_tests(fd):
 def serialize(node, indent=1):
     if isinstance(node, Document):
         for child in node.children:
-            yield from serialize(child, indent)
+            for text in serialize(child, indent):
+                yield text
         return
 
     yield '|'
@@ -131,11 +132,13 @@ def serialize(node, indent=1):
             yield '%s="%s"\n' % (local_name, value)
 
     for child in node.children:
-        yield from serialize(child, indent + 2)
+        for text in serialize(child, indent + 2):
+            yield text
 
     if isinstance(node, Element) and node.template_contents:
         yield '|'
         yield ' ' * (indent + 2)
         yield 'content\n'
         for child in node.template_contents.children:
-            yield from serialize(child, indent + 4)
+            for text in serialize(child, indent + 4):
+                yield text
