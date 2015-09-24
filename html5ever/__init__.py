@@ -4,15 +4,80 @@ from ._ffi import ffi
 capi = ffi.dlopen(os.path.join(os.path.dirname(__file__), 'libhtml5ever_capi.so'))
 
 
-def parse(bytes):
-    parser = Parser()
+class DefaultTreeBuilder(object):
+    def new_document(self):
+        return Document()
+
+    def new_element(self, namespace_url, local_name):
+        return Element(namespace_url, local_name)
+
+    def element_add_template_contents(self, element):
+        element.template_contents = DocumentFragment()
+        return element.template_contents
+
+    def element_add_attribute_if_missing(self, element, namespace_url, local_name, value):
+        element.attributes.setdefault((namespace_url, local_name), value)
+
+    def new_comment(self, data):
+        return Comment(data)
+
+    def append_doctype_to_document(self, document, name, public_id, system_id):
+        document.children.append(Doctype(name, public_id, system_id))
+
+    def append_node(self, parent, new_child):
+        parent.children.append(new_child)
+        new_child.parent = parent
+
+    def append_text(self, parent, data):
+        if parent.children and isinstance(parent.children[-1], Text):
+            parent.children[-1].data += data
+        else:
+            child = Text(data)
+            child.parent = parent
+            parent.children.append(child)
+
+    def insert_node_before_sibling(self, sibling, new_sibling):
+        parent = sibling.parent
+        if parent is None:
+            return False
+        position = parent.children.index(sibling)
+        parent.children.insert(position, new_sibling)
+        return True
+
+    def insert_text_before_sibling(self, sibling, data):
+        parent = sibling.parent
+        if parent is None:
+            return False
+        position = parent.children.index(sibling)
+        if position > 0 and isinstance(parent.children[position - 1], Text):
+            parent.children[position - 1].data += data
+        else:
+            child = Text(data)
+            child.parent = parent
+            parent.children.insert(position, child)
+        return True
+
+    def reparent_children(self, parent, new_parent):
+        for child in parent.children:
+            child.parent = new_parent
+        new_parent.children.extend(parent.children)
+        parent.children = []
+
+    def remove_from_parent(self, node):
+        if node.parent is not None:
+            node.parent.children.remove(node)
+            node.parent = None
+
+
+def parse(bytes, tree_builder=DefaultTreeBuilder):
+    parser = Parser(tree_builder=tree_builder)
     parser.feed(bytes)
     return parser.end()
 
 
 class Parser(object):
-    def __init__(self, tree_builder=None):
-        self.tree_builder = tree_builder or DefaultTreeBuilder()
+    def __init__(self, tree_builder=DefaultTreeBuilder):
+        self.tree_builder = tree_builder()
         self._keep_alive_handles = []
         self._template_contents_keep_alive_handles = {}
         self._document = self.tree_builder.new_document()
@@ -102,71 +167,6 @@ class Doctype(Node):
         self.name = name
         self.public_id = public_id
         self.system_id = system_id
-
-
-class DefaultTreeBuilder(object):
-    def new_document(self):
-        return Document()
-
-    def new_element(self, namespace_url, local_name):
-        return Element(namespace_url, local_name)
-
-    def element_add_template_contents(self, element):
-        element.template_contents = DocumentFragment()
-        return element.template_contents
-
-    def element_add_attribute_if_missing(self, element, namespace_url, local_name, value):
-        element.attributes.setdefault((namespace_url, local_name), value)
-
-    def new_comment(self, data):
-        return Comment(data)
-
-    def append_doctype_to_document(self, document, name, public_id, system_id):
-        document.children.append(Doctype(name, public_id, system_id))
-
-    def append_node(self, parent, new_child):
-        parent.children.append(new_child)
-        new_child.parent = parent
-
-    def append_text(self, parent, data):
-        if parent.children and isinstance(parent.children[-1], Text):
-            parent.children[-1].data += data
-        else:
-            child = Text(data)
-            child.parent = parent
-            parent.children.append(child)
-
-    def insert_node_before_sibling(self, sibling, new_sibling):
-        parent = sibling.parent
-        if parent is None:
-            return False
-        position = parent.children.index(sibling)
-        parent.children.insert(position, new_sibling)
-        return True
-
-    def insert_text_before_sibling(self, sibling, data):
-        parent = sibling.parent
-        if parent is None:
-            return False
-        position = parent.children.index(sibling)
-        if position > 0 and isinstance(parent.children[position - 1], Text):
-            parent.children[position - 1].data += data
-        else:
-            child = Text(data)
-            child.parent = parent
-            parent.children.insert(position, child)
-        return True
-
-    def reparent_children(self, parent, new_parent):
-        for child in parent.children:
-            child.parent = new_parent
-        new_parent.children.extend(parent.children)
-        parent.children = []
-
-    def remove_from_parent(self, node):
-        if node.parent is not None:
-            node.parent.children.remove(node)
-            node.parent = None
 
 
 def str_from_slice(slice_):

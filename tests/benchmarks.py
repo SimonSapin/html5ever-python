@@ -1,5 +1,5 @@
 import hashlib
-import html5ever
+import html5ever.elementtree
 import html5lib
 import lxml.html
 import os.path
@@ -29,6 +29,8 @@ def run(url, quick=False):
         bench_rust(root, html)
         bench('lxml.html', lambda: lxml.html.fromstring(html))
     bench('html5ever-python', lambda: html5ever.parse(html))
+    bench('html5ever-python to ElementTree',
+          lambda: html5ever.parse(html, tree_builder=html5ever.elementtree.TreeBuilder))
     if not quick:
         bench('html5lib to ElementTree', lambda: html5lib.parse(html))
         bench('html5lib to lxml', lambda: html5lib.parse(html, treebuilder='lxml'))
