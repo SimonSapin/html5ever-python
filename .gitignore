@@ -8,3 +8,4 @@ html5ever/_ffi.py
 target/
 .cache/
 .eggs/
+profile

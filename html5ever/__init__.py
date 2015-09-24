@@ -11,10 +11,11 @@ def parse(bytes):
 
 
 class Parser(object):
-    def __init__(self):
+    def __init__(self, tree_builder=None):
+        self.tree_builder = tree_builder or DefaultTreeBuilder()
         self._keep_alive_handles = []
         self._template_contents_keep_alive_handles = {}
-        self._document = Document()
+        self._document = self.tree_builder.new_document()
         self._ptr = ffi.gc(
             check_null(capi.new_parser(
                 CALLBACKS, self._keep_alive(self), self._keep_alive(self._document))),
@@ -103,6 +104,71 @@ class Doctype(Node):
         self.system_id = system_id
 
 
+class DefaultTreeBuilder(object):
+    def new_document(self):
+        return Document()
+
+    def new_element(self, namespace_url, local_name):
+        return Element(namespace_url, local_name)
+
+    def element_add_template_contents(self, element):
+        element.template_contents = DocumentFragment()
+        return element.template_contents
+
+    def element_add_attribute_if_missing(self, element, namespace_url, local_name, value):
+        element.attributes.setdefault((namespace_url, local_name), value)
+
+    def new_comment(self, data):
+        return Comment(data)
+
+    def append_doctype_to_document(self, document, name, public_id, system_id):
+        document.children.append(Doctype(name, public_id, system_id))
+
+    def append_node(self, parent, new_child):
+        parent.children.append(new_child)
+        new_child.parent = parent
+
+    def append_text(self, parent, data):
+        if parent.children and isinstance(parent.children[-1], Text):
+            parent.children[-1].data += data
+        else:
+            child = Text(data)
+            child.parent = parent
+            parent.children.append(child)
+
+    def insert_node_before_sibling(self, sibling, new_sibling):
+        parent = sibling.parent
+        if parent is None:
+            return False
+        position = parent.children.index(sibling)
+        parent.children.insert(position, new_sibling)
+        return True
+
+    def insert_text_before_sibling(self, sibling, data):
+        parent = sibling.parent
+        if parent is None:
+            return False
+        position = parent.children.index(sibling)
+        if position > 0 and isinstance(parent.children[position - 1], Text):
+            parent.children[position - 1].data += data
+        else:
+            child = Text(data)
+            child.parent = parent
+            parent.children.insert(position, child)
+        return True
+
+    def reparent_children(self, parent, new_parent):
+        for child in parent.children:
+            child.parent = new_parent
+        new_parent.children.extend(parent.children)
+        parent.children = []
+
+    def remove_from_parent(self, node):
+        if node.parent is not None:
+            node.parent.children.remove(node)
+            node.parent = None
+
+
 def str_from_slice(slice_):
     return ffi.buffer(slice_.ptr, slice_.len)[:]
 
@@ -110,11 +176,12 @@ def str_from_slice(slice_):
 @ffi.callback('Node*(ParserUserData*, Utf8Slice, Utf8Slice)')
 def create_element(parser, namespace_url, local_name):
     parser = ffi.from_handle(ffi.cast('void*', parser))
-    element = Element(str_from_slice(namespace_url), str_from_slice(local_name))
-    if element.name == (HTML_NAMESPACE, b'template'):
-        element.template_contents = DocumentFragment()
+    namespace_url = str_from_slice(namespace_url)
+    local_name = str_from_slice(local_name)
+    element = parser.tree_builder.new_element(namespace_url, local_name)
+    if local_name == b'template' and namespace_url == HTML_NAMESPACE:
         parser._template_contents_keep_alive_handles[element] = \
-            ffi.new_handle(element.template_contents)
+            ffi.new_handle(parser.tree_builder.element_add_template_contents(element))
     return parser._keep_alive(element)
 
 
@@ -126,10 +193,13 @@ def get_template_contents(parser, element):
 
 
 @ffi.callback('int(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
-def add_attribute_if_missing(_parser, element, namespace_url, local_name, value):
+def add_attribute_if_missing(parser, element, namespace_url, local_name, value):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
     element = ffi.from_handle(ffi.cast('void*', element))
-    element.attributes.setdefault(
-        (str_from_slice(namespace_url), str_from_slice(local_name)),
+    parser.tree_builder.element_add_attribute_if_missing(
+        element,
+        str_from_slice(namespace_url),
+        str_from_slice(local_name),
         str_from_slice(value))
     return 0
 
@@ -137,87 +207,66 @@ def add_attribute_if_missing(_parser, element, namespace_url, local_name, value)
 @ffi.callback('Node*(ParserUserData*, Utf8Slice)')
 def create_comment(parser, data):
     parser = ffi.from_handle(ffi.cast('void*', parser))
-    return parser._keep_alive(Comment(str_from_slice(data)))
+    return parser._keep_alive(parser.tree_builder.new_comment(str_from_slice(data)))
 
 
 @ffi.callback('int(ParserUserData*, uintptr_t, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
 def append_doctype_to_document(parser, _dummy, name, public_id, system_id):
     parser = ffi.from_handle(ffi.cast('void*', parser))
-    parser._document.children.append(Doctype(
+    parser.tree_builder.append_doctype_to_document(
+        parser._document,
         str_from_slice(name),
         str_from_slice(public_id),
-        str_from_slice(system_id)))
+        str_from_slice(system_id))
     return 0
 
 
 @ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
-def append_node(_parser, parent, child):
+def append_node(parser, parent, child):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
     parent = ffi.from_handle(ffi.cast('void*', parent))
     child = ffi.from_handle(ffi.cast('void*', child))
-    child.parent = parent
-    parent.children.append(child)
+    parser.tree_builder.append_node(parent, child)
     return 0
 
 
 @ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1)
-def append_text(_parser, parent, data):
+def append_text(parser, parent, data):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
     parent = ffi.from_handle(ffi.cast('void*', parent))
-    data = str_from_slice(data)
-    if parent.children and isinstance(parent.children[-1], Text):
-        parent.children[-1].data += data
-    else:
-        child = Text(data)
-        child.parent = parent
-        parent.children.append(child)
+    parser.tree_builder.append_text(parent, str_from_slice(data))
     return 0
 
 
 @ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
-def insert_node_before_sibling(_parser, sibling, child):
+def insert_node_before_sibling(parser, sibling, new_sibling):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
     sibling = ffi.from_handle(ffi.cast('void*', sibling))
-    parent = sibling.parent
-    if parent is None:
-        return 0
-    child = ffi.from_handle(ffi.cast('void*', child))
-    position = parent.children.index(sibling)
-    parent.children.insert(position, child)
-    return 1
+    new_sibling = ffi.from_handle(ffi.cast('void*', new_sibling))
+    return parser.tree_builder.insert_node_before_sibling(sibling, new_sibling)
 
 
 @ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1)
-def insert_text_before_sibling(_parser, sibling, data):
+def insert_text_before_sibling(parser, sibling, data):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
     sibling = ffi.from_handle(ffi.cast('void*', sibling))
-    parent = sibling.parent
-    if parent is None:
-        return 0
-    data = str_from_slice(data)
-    position = parent.children.index(sibling)
-    if position > 0 and isinstance(parent.children[position - 1], Text):
-        parent.children[position - 1].data += data
-    else:
-        child = Text(data)
-        child.parent = parent
-        parent.children.insert(position, child)
-    return 1
+    return parser.tree_builder.insert_text_before_sibling(sibling, str_from_slice(data))
 
 
 @ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
-def reparent_children(_parser, parent, new_parent):
+def reparent_children(parser, parent, new_parent):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
     parent = ffi.from_handle(ffi.cast('void*', parent))
     new_parent = ffi.from_handle(ffi.cast('void*', new_parent))
-    for child in parent.children:
-        child.parent = new_parent
-    new_parent.children.extend(parent.children)
-    parent.children = []
+    parser.tree_builder.reparent_children(parent, new_parent)
     return 0
 
 
 @ffi.callback('int(ParserUserData*, Node*)', error=-1)
-def remove_from_parent(_parser, node):
+def remove_from_parent(parser, node):
+    parser = ffi.from_handle(ffi.cast('void*', parser))
     node = ffi.from_handle(ffi.cast('void*', node))
-    if node.parent is not None:
-        node.parent.children.remove(node)
-        node.parent = None
+    parser.tree_builder.remove_from_parent(node)
     return 0
 
 
