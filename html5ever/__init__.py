@@ -1,5 +1,4 @@
 import os.path
-import weakref
 from ._ffi import ffi
 
 capi = ffi.dlopen(os.path.join(os.path.dirname(__file__), 'libhtml5ever_capi.so'))
@@ -51,18 +50,8 @@ class Parser(object):
 class Node(object):
     '''Abstract base class for all nodes in the tree.'''
     def __init__(self):
-        self._parent = None
+        self.parent = None
         self.children = []
-
-    @property
-    def parent(self):
-        parent = self._parent
-        if parent is not None:
-            return parent()
-
-    @parent.setter
-    def parent(self, new_parent):
-        self._parent = weakref.ref(new_parent) if new_parent is not None else None
 
 
 class Document(Node):
@@ -84,7 +73,7 @@ XMLNS_NAMESPACE = b'http://www.w3.org/2000/xmlns/'
 class Element(Node):
     '''An element node.'''
     def __init__(self, namespace_url, local_name):
-        self._parent = None
+        self.parent = None
         self.children = []
         self.name = (namespace_url, local_name)
         self.attributes = {}
@@ -94,21 +83,21 @@ class Element(Node):
 class Text(Node):
     '''A text node.'''
     def __init__(self, data):
-        self._parent = None
+        self.parent = None
         self.data = data
 
 
 class Comment(Node):
     '''A comment node.'''
     def __init__(self, data):
-        self._parent = None
+        self.parent = None
         self.data = data
 
 
 class Doctype(Node):
     '''A doctype node.'''
     def __init__(self, name, public_id, system_id):
-        self._parent = None
+        self.parent = None
         self.name = name
         self.public_id = public_id
         self.system_id = system_id
