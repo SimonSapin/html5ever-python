@@ -1,0 +1,17 @@
+Python 2.7.10 (f3ad1e1e1d62, Sep 07 2015, 21:46:51) [PyPy 2.6.1 with GCC 5.2.0]
+rustc rustc 1.5.0-nightly (f0666b45d 2015-09-24)
+html5ever 0.2.5
+lxml (3, 4, 4, 0)
+libxml (2, 9, 2)
+htmllib 0.9999999
+
+HTML source SHA1: 6a2963fa1f15fe99884acdad8a895af4df8e8c01
+Best time of 3, parsing 5,598,887 bytes of HTML:
+
+html5ever to Rust RcDom: 0.324 seconds
+lxml.html: 0.225 seconds
+html5ever-python: 0.658 seconds
+html5ever-python to ElementTree: 0.873 seconds
+html5lib to ElementTree: 3.158 seconds
+html5lib to lxml: 26.237 seconds
+

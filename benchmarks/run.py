@@ -27,6 +27,7 @@ def run(url, quick=False):
         print('HTML source SHA1: {}'.format(hashlib.sha1(html).hexdigest()))
         print('Best time of 3, parsing {:,} bytes of HTML:'.format(len(html)))
         print('')
+        sys.stdout.flush()
         bench_rust(root, html)
         bench('lxml.html', lambda: lxml.html.fromstring(html))
     bench('html5ever-python', lambda: html5ever.parse(html))
@@ -35,11 +36,12 @@ def run(url, quick=False):
     if not quick:
         bench('html5lib to ElementTree', lambda: html5lib.parse(html))
         bench('html5lib to lxml', lambda: html5lib.parse(html, treebuilder='lxml'))
+    print('')
 
 
 def rustc_version():
     stdout, stderr = subprocess.Popen(['rustc', '--version'], stdout=subprocess.PIPE).communicate()
-    return stdout.strip()
+    return stdout.strip().decode('utf8')
 
 
 def html5ever_version(root):
