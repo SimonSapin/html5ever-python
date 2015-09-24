@@ -18,6 +18,7 @@ def run(url, quick=False):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     print('Python {}'.format(sys.version.replace('\n', ' ')))
     if not quick:
+        print('rustc {}'.format(rustc_version()))
         print('html5ever {}'.format(html5ever_version(root)))
         print('lxml {}'.format(lxml.etree.LXML_VERSION))
         print('libxml {}'.format(lxml.etree.LIBXML_COMPILED_VERSION))
@@ -34,6 +35,11 @@ def run(url, quick=False):
     if not quick:
         bench('html5lib to ElementTree', lambda: html5lib.parse(html))
         bench('html5lib to lxml', lambda: html5lib.parse(html, treebuilder='lxml'))
+
+
+def rustc_version():
+    stdout, stderr = subprocess.Popen(['rustc', '--version'], stdout=subprocess.PIPE).communicate()
+    return stdout.strip()
 
 
 def html5ever_version(root):
