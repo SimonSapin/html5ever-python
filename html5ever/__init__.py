@@ -1,5 +1,8 @@
 import os.path
+import sys
+import threading
 from ._ffi import ffi
+
 
 capi = ffi.dlopen(os.path.join(os.path.dirname(__file__), 'libhtml5ever_capi.so'))
 
@@ -178,7 +181,37 @@ def str_from_slice(slice_):
     return ffi.buffer(slice_.ptr, slice_.len)[:]
 
 
-@ffi.callback('Node*(ParserUserData*, Utf8Slice, Utf8Slice)')
+CALLBACK_EXCPTION = threading.local()
+CALLBACK_EXCPTION.exception_data = None
+
+
+def onerror(exception, exc_value, traceback):
+    CALLBACK_EXCPTION.exception_data = (exception, exc_value, traceback)
+
+
+if sys.version_info[0] >= 3:
+    def raise_(exception, exc_value, traceback):
+        if exc_value is not None:
+            exception = exception(exc_value)
+        if exception.__traceback__ is traceback:
+            raise exception
+        raise exception.with_traceback(traceback)
+else:
+    exec('''
+        def raise_(exception, exc_value, traceback):
+            raise exception, exc_value, traceback
+    '''.strip())
+
+
+# Keyword arguments in case this is called during interpreter shutdown when globals are gone.
+def check_callback_exception(CALLBACK_EXCPTION=CALLBACK_EXCPTION, raise_=raise_):
+    exception_data = CALLBACK_EXCPTION.exception_data
+    if exception_data is not None:
+        CALLBACK_EXCPTION.exception_data = None
+        raise_(*exception_data)
+
+
+@ffi.callback('Node*(ParserUserData*, Utf8Slice, Utf8Slice)', onerror=onerror)
 def create_element(parser, namespace_url, local_name):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     namespace_url = str_from_slice(namespace_url)
@@ -190,14 +223,15 @@ def create_element(parser, namespace_url, local_name):
     return parser._keep_alive(element)
 
 
-@ffi.callback('Node*(ParserUserData*, Node*)')
+@ffi.callback('Node*(ParserUserData*, Node*)', onerror=onerror)
 def get_template_contents(parser, element):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     element = ffi.from_handle(ffi.cast('void*', element))
     return parser._template_contents_keep_alive_handles[element]
 
 
-@ffi.callback('int(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
+@ffi.callback('int(ParserUserData*, Node*, Utf8Slice, Utf8Slice, Utf8Slice)',
+              error=-1, onerror=onerror)
 def add_attribute_if_missing(parser, element, namespace_url, local_name, value):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     element = ffi.from_handle(ffi.cast('void*', element))
@@ -209,13 +243,14 @@ def add_attribute_if_missing(parser, element, namespace_url, local_name, value):
     return 0
 
 
-@ffi.callback('Node*(ParserUserData*, Utf8Slice)')
+@ffi.callback('Node*(ParserUserData*, Utf8Slice)', onerror=onerror)
 def create_comment(parser, data):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     return parser._keep_alive(parser.tree_builder.new_comment(str_from_slice(data)))
 
 
-@ffi.callback('int(ParserUserData*, uintptr_t, Utf8Slice, Utf8Slice, Utf8Slice)', error=-1)
+@ffi.callback('int(ParserUserData*, uintptr_t, Utf8Slice, Utf8Slice, Utf8Slice)',
+              error=-1, onerror=onerror)
 def append_doctype_to_document(parser, _dummy, name, public_id, system_id):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     parser.tree_builder.append_doctype_to_document(
@@ -226,7 +261,7 @@ def append_doctype_to_document(parser, _dummy, name, public_id, system_id):
     return 0
 
 
-@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
+@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1, onerror=onerror)
 def append_node(parser, parent, child):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     parent = ffi.from_handle(ffi.cast('void*', parent))
@@ -235,7 +270,7 @@ def append_node(parser, parent, child):
     return 0
 
 
-@ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1)
+@ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1, onerror=onerror)
 def append_text(parser, parent, data):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     parent = ffi.from_handle(ffi.cast('void*', parent))
@@ -243,7 +278,7 @@ def append_text(parser, parent, data):
     return 0
 
 
-@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
+@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1, onerror=onerror)
 def insert_node_before_sibling(parser, sibling, new_sibling):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     sibling = ffi.from_handle(ffi.cast('void*', sibling))
@@ -251,14 +286,14 @@ def insert_node_before_sibling(parser, sibling, new_sibling):
     return parser.tree_builder.insert_node_before_sibling(sibling, new_sibling)
 
 
-@ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1)
+@ffi.callback('int(ParserUserData*, Node*, Utf8Slice)', error=-1, onerror=onerror)
 def insert_text_before_sibling(parser, sibling, data):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     sibling = ffi.from_handle(ffi.cast('void*', sibling))
     return parser.tree_builder.insert_text_before_sibling(sibling, str_from_slice(data))
 
 
-@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1)
+@ffi.callback('int(ParserUserData*, Node*, Node*)', error=-1, onerror=onerror)
 def reparent_children(parser, parent, new_parent):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     parent = ffi.from_handle(ffi.cast('void*', parent))
@@ -267,7 +302,7 @@ def reparent_children(parser, parent, new_parent):
     return 0
 
 
-@ffi.callback('int(ParserUserData*, Node*)', error=-1)
+@ffi.callback('int(ParserUserData*, Node*)', error=-1, onerror=onerror)
 def remove_from_parent(parser, node):
     parser = ffi.from_handle(ffi.cast('void*', parser))
     node = ffi.from_handle(ffi.cast('void*', node))
@@ -275,22 +310,25 @@ def remove_from_parent(parser, node):
     return 0
 
 
-def check_null(pointer):
+class RustPanic(Exception):
+    '''Some Rust code panicked. This is a bug.'''
+
+
+# Keyword arguments in case this is called during interpreter shutdown when globals are gone.
+def check_null(pointer, check_callback_exception=check_callback_exception, RustPanic=RustPanic):
+    check_callback_exception()
     if pointer == ffi.NULL:
         raise RustPanic()
     else:
         return pointer
 
-
-def check_int(value):
+# Keyword arguments in case this is called during interpreter shutdown when globals are gone.
+def check_int(value, check_callback_exception=check_callback_exception, RustPanic=RustPanic):
+    check_callback_exception()
     if value < 0:
         raise RustPanic()
     else:
         return value
-
-
-class RustPanic(Exception):
-    '''Some Rust code panicked. This is a bug.'''
 
 
 CALLBACKS = check_null(capi.declare_callbacks(
