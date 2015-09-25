@@ -74,6 +74,11 @@ def parse(bytes, tree_builder=DefaultTreeBuilder):
     parser.feed(bytes)
     return parser.end()
 
+def compose(func1, func2):
+    def composed(arg):
+        return func2(func1(arg))
+    return composed
+
 
 class Parser(object):
     def __init__(self, tree_builder=DefaultTreeBuilder):
@@ -84,7 +89,7 @@ class Parser(object):
         self._ptr = ffi.gc(
             check_null(capi.new_parser(
                 CALLBACKS, self._keep_alive(self), self._keep_alive(self._document))),
-            lambda ptr: check_int(capi.destroy_parser(ptr)))
+            compose(capi.destroy_parser, check_int))
 
     def feed(self, bytes_chunk):
         data = ffi.new('char[]', bytes_chunk)
