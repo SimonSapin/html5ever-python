@@ -8,10 +8,10 @@ htmllib 0.9999999
 HTML source SHA1: 6a2963fa1f15fe99884acdad8a895af4df8e8c01
 Best time of 3, parsing 5,598,887 bytes of HTML:
 
-html5ever to Rust RcDom: 0.324 seconds
-lxml.html: 0.225 seconds
-html5ever-python: 0.658 seconds
-html5ever-python to ElementTree: 0.873 seconds
-html5lib to ElementTree: 3.158 seconds
-html5lib to lxml: 26.237 seconds
+html5ever to Rust RcDom: 16.822 MiB/s
+lxml.html: 24.181 MiB/s
+html5ever-python: 8.832 MiB/s
+html5ever-python to ElementTree: 7.825 MiB/s
+html5lib to ElementTree: 1.888 MiB/s
+html5lib to lxml: 0.249 MiB/s
 

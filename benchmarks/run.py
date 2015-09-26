@@ -15,6 +15,7 @@ except ImportError:
 
 def run(url, quick=False):
     html = urlopen(url).read()
+    bytes = len(html)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     print('Python {}'.format(sys.version.replace('\n', ' ')))
     if not quick:
@@ -25,17 +26,17 @@ def run(url, quick=False):
         print('htmllib {}'.format(html5lib.__version__))
         print('')
         print('HTML source SHA1: {}'.format(hashlib.sha1(html).hexdigest()))
-        print('Best time of 3, parsing {:,} bytes of HTML:'.format(len(html)))
+        print('Best time of 3, parsing {:,} bytes of HTML:'.format(bytes))
         print('')
         sys.stdout.flush()
-        bench_rust(root, html)
-        bench('lxml.html', lambda: lxml.html.fromstring(html))
-    bench('html5ever-python', lambda: html5ever.parse(html))
-    bench('html5ever-python to ElementTree',
+        bench_rust(bytes, root, html)
+        bench_python(bytes, 'lxml.html', lambda: lxml.html.fromstring(html))
+    bench_python(bytes, 'html5ever-python', lambda: html5ever.parse(html))
+    bench_python(bytes, 'html5ever-python to ElementTree',
           lambda: html5ever.parse(html, tree_builder=html5ever.elementtree.TreeBuilder))
     if not quick:
-        bench('html5lib to ElementTree', lambda: html5lib.parse(html))
-        bench('html5lib to lxml', lambda: html5lib.parse(html, treebuilder='lxml'))
+        bench_python(bytes, 'html5lib to ElementTree', lambda: html5lib.parse(html))
+        bench_python(bytes, 'html5lib to lxml', lambda: html5lib.parse(html, treebuilder='lxml'))
     print('')
 
 
@@ -49,19 +50,26 @@ def html5ever_version(root):
         return re.search(b'html5ever ([\d.]+)', fd.read()).group(1).decode('utf8')
 
 
-def bench_rust(root, html):
+def bench_rust(bytes, root, html):
     subprocess.check_call([
         'cargo', 'test', '--no-run', '--release', '--manifest-path',
         os.path.join(root, 'rust-glue', 'Cargo.toml'),
     ])
-    subprocess.Popen(
+    stdout, _stderr = subprocess.Popen(
         [os.path.join(root, 'rust-glue', 'target', 'release', 'examples', 'time_parse_stdin')],
         stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
     ).communicate(html)
+    bench(bytes, 'html5ever to Rust RcDom', float(stdout))
 
 
-def bench(name, func):
-    print('{}: {:.3f} seconds'.format(name, min(timeit.repeat(func, number=1, repeat=3))))
+def bench_python(bytes, name, func):
+    bench(bytes, name, min(timeit.repeat(func, number=1, repeat=3)))
+
+
+def bench(bytes, name, seconds):
+    print('{}: {:.3f} MiB/s'.format(name, bytes / seconds / (1024. ** 2)))
+    sys.stdout.flush()
 
 
 if __name__ == '__main__':

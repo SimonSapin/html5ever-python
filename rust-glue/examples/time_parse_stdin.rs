@@ -15,6 +15,5 @@ fn main() {
         let data = StrTendril::from_slice(&String::from_utf8_lossy(&data));
         let _dom: RcDom = parse(one_input(data), Default::default());
     })).min().unwrap();
-    const NANOS_PER_MILI: u32 = 1_000_000;
-    println!("html5ever to Rust RcDom: {}.{:03} seconds", d.as_secs(), d.subsec_nanos() / NANOS_PER_MILI);
+    println!("{}.{:09}", d.as_secs(), d.subsec_nanos());
 }
